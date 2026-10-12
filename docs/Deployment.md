@@ -16,7 +16,7 @@ The image is built in two stages. The final stage is `gcr.io/distroless/static-d
 - `/app/migrator`, which applies the database migrations (ADR-0014);
 - `/app/migrations`, the SQL files the migrator reads (`MIGRATIONS_PATH` is preset to it).
 
-`make lint.docker` runs hadolint with the rules in `hadolint.yaml`, and `make scan.docker` scans the image for fixable HIGH and CRITICAL vulnerabilities. CI does both before it publishes (`.github/workflows/docker.yml`).
+`make lint.docker` runs hadolint with the rules in `hadolint.yaml`, and `make scan.docker` scans the image for fixable HIGH and CRITICAL vulnerabilities. CI does both before it publishes (`.github/workflows/ci.yml`).
 
 Without Docker: `make build` writes the binary to `bin/fupi`.
 

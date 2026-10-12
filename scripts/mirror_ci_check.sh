@@ -19,9 +19,9 @@ lint_image="$(grep -oE 'golangci/golangci-lint:v[0-9.]+' .make/dev.mk | head -1)
 [ -n "$go_minor" ] || { echo "cannot read the Go version from go.mod"; exit 1; }
 [ -n "$lint_image" ] || { echo "cannot read the golangci-lint image from .make/dev.mk"; exit 1; }
 
-# What GitHub runs: the test commands (tests.yml) and the build (build_app.yml).
-github_commands="$(sed -nE 's/^[[:space:]]*command:[[:space:]]*(make [A-Za-z0-9._-]+).*/\1/p' .github/workflows/tests.yml | sort -u)
-$(sed -nE 's/^[[:space:]]*run:[[:space:]]*(make build)[[:space:]]*$/\1/p' .github/workflows/build_app.yml | sort -u)"
+# What GitHub runs: the test commands and the build (ci.yml).
+github_commands="$(sed -nE 's/^[[:space:]]*command:[[:space:]]*(make [A-Za-z0-9._-]+).*/\1/p' .github/workflows/ci.yml | sort -u)
+$(sed -nE 's/^[[:space:]]*run:[[:space:]]*(make build)[[:space:]]*$/\1/p' .github/workflows/ci.yml | sort -u)"
 
 required=(
   "golangci-lint run"

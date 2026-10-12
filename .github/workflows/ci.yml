@@ -1,0 +1,327 @@
+# One pipeline for every push, so each job sees the commit that was pushed. Jobs are chained with `needs:`: a failed job stops
+# every job after it. A workflow started by another workflow_run workflow runs against the default branch's head, not the tested
+# commit, which is why Slack is the only workflow_run consumer.
+name: CI
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: SanctumLabs/ci-workflows/.github/workflows/go-lint.yml@main
+    with:
+      go-version: '1.26'
+
+  unit_tests:
+    needs: lint
+    strategy:
+      matrix:
+        go-version: [ '1.26' ]
+    name: Unit Tests (Go ${{ matrix.go-version }})
+    uses: SanctumLabs/ci-workflows/.github/workflows/go-test.yml@main
+    with:
+      go-version: ${{ matrix.go-version }}
+      command: make test.coverage
+    secrets:
+      codacy_token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
+  integration_tests:
+    needs: lint
+    strategy:
+      matrix:
+        go-version: [ '1.26' ]
+    name: Integration Tests (Go ${{ matrix.go-version }})
+    uses: SanctumLabs/ci-workflows/.github/workflows/go-test.yml@main
+    with:
+      go-version: ${{ matrix.go-version }}
+      command: make test.integration
+      database-image-name: dhi.io/postgres
+      database-image-version: 18-alpine3.23-dev
+      database-name: fupi
+      database-username: fupi_user
+      database-password: fupi_password
+      database-port: 5432
+      database-port-internal: 5432
+
+  e2e_tests:
+    needs: lint
+    strategy:
+      matrix:
+        go-version: [ '1.26' ]
+    name: E2E Tests (Go ${{ matrix.go-version }})
+    uses: SanctumLabs/ci-workflows/.github/workflows/go-test.yml@main
+    with:
+      go-version: ${{ matrix.go-version }}
+      command: make test.e2e
+      database-image-name: dhi.io/postgres
+      database-image-version: 18-alpine3.23-dev
+      database-name: fupi_database_test
+      database-username: fupi_user
+      database-password: fupi_password
+      database-port: 5432
+      database-port-internal: 5432
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: [ unit_tests, integration_tests, e2e_tests ]
+
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run Build
+        run: make build
+
+      - name: Upload App Build
+        uses: actions/upload-artifact@v7.0.1
+        # due to possible limitations of artifact upload size limits, we can allow this failure
+        continue-on-error: true
+        with:
+          name: fupi-${{ matrix.platform }}
+          path: bin/fupi*
+
+  # Builds the image once, lints and scans it, then publishes it to Docker Hub and GHCR.
+  # Reference: https://docs.docker.com/build/ci/github-actions/
+  push_docker_image:
+    name: Build, Scan and Push Docker Image
+    needs: build
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout the commit that was built
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Lint the Dockerfile
+        uses: hadolint/hadolint-action@v3.5.0
+        with:
+          dockerfile: Dockerfile
+          config: hadolint.yaml
+
+      - name: Image version
+        id: version
+        run: |
+          {
+            echo "version=$(git describe --tags --always)"
+            echo "short_sha=$(git rev-parse --short=7 HEAD)"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Docker tags
+        id: meta
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: |
+            ${{ secrets.DOCKER_REGISTRY }}/fupi
+            ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=sha-${{ steps.version.outputs.short_sha }}
+
+      - name: Build the image for scanning
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: fupi-scan:ci
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.version.outputs.created }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check the image is hardened
+        run: scripts/image_test.sh image fupi-scan:ci
+
+      - name: Scan the image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: fupi-scan:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the image to Docker Hub and GitHub Container Registry
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.version.outputs.created }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy Application
+    needs: build
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      # https://github.com/superfly/flyctl-actions
+      - uses: superfly/flyctl-actions/setup-flyctl@1.5
+
+      # Secrets reach the script as environment variables, never interpolated into the script text.
+      - name: Set secrets and deploy
+        run: |
+          flyctl secrets set \
+            DATABASE_HOST="$DATABASE_HOST" \
+            DATABASE="$DATABASE" \
+            DATABASE_NAME="$DATABASE" \
+            DATABASE_USERNAME="$DATABASE_USERNAME" \
+            DATABASE_PASSWORD="$DATABASE_PASSWORD" \
+            DATABASE_PORT="$DATABASE_PORT" \
+            AUTH_SECRET="$AUTH_SECRET" \
+            AUTH_EXPIRE="$AUTH_EXPIRE" \
+            AUTH_ISSUER="$AUTH_ISSUER" \
+            CACHE_HOST="$CACHE_HOST" \
+            CACHE_PORT="$CACHE_PORT" \
+            CACHE_USERNAME="$CACHE_USERNAME" \
+            CACHE_PASSWORD="$CACHE_PASSWORD" \
+            REDIS_ADDRESS="${CACHE_HOST}:${CACHE_PORT}" \
+            REDIS_USERNAME="$CACHE_USERNAME" \
+            REDIS_PASSWORD="$CACHE_PASSWORD" \
+            CACHE_REQUIRE_AUTH="$CACHE_REQUIRE_AUTH" \
+            SENTRY_DSN="$SENTRY_DSN" \
+            SENTRY_ENV="$SENTRY_ENV" \
+            SENTRY_SAMPLE_RATE="$SENTRY_SAMPLE_RATE" \
+            SENTRY_ENABLED="$SENTRY_ENABLED"
+          flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+          DATABASE: ${{ secrets.DATABASE }}
+          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_EXPIRE: ${{ secrets.AUTH_EXPIRE }}
+          AUTH_ISSUER: ${{ secrets.AUTH_ISSUER }}
+          CACHE_HOST: ${{ secrets.CACHE_HOST }}
+          CACHE_PORT: ${{ secrets.CACHE_PORT }}
+          CACHE_USERNAME: ${{ secrets.CACHE_USERNAME }}
+          CACHE_PASSWORD: ${{ secrets.CACHE_PASSWORD }}
+          CACHE_REQUIRE_AUTH: ${{ secrets.CACHE_REQUIRE_AUTH }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENV: ${{ secrets.SENTRY_ENV }}
+          SENTRY_SAMPLE_RATE: ${{ secrets.SENTRY_SAMPLE_RATE }}
+          SENTRY_ENABLED: ${{ secrets.SENTRY_ENABLED }}
+
+  release:
+    name: Release
+    needs: build
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          # semantic-release pushes with GH_RELEASE_TOKEN; a persisted read-only GITHUB_TOKEN would take precedence and fail the push
+          persist-credentials: false
+
+      - name: Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+
+  sentryrelease:
+    name: Sentry Release
+    needs: build
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install Go
+      uses: actions/setup-go@v7.0.0
+      with:
+        go-version-file: go.mod
+
+    - name: Install Dependencies
+      run: make install
+
+    - name: Run Build
+      run: make build
+
+    - name: Create Sentry Staging release
+      if: github.ref == 'refs/heads/develop'
+      uses: getsentry/action-release@v3.7.0
+      env:
+        SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_GH_RELEASE_AUTH_TOKEN }}
+        SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+        SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+      with:
+        environment: staging
+
+    - name: Create Sentry Production release
+      if: github.ref == 'refs/heads/main'
+      uses: getsentry/action-release@v3.7.0
+      env:
+        SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_GH_RELEASE_AUTH_TOKEN }}
+        SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+        SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+      with:
+        environment: production

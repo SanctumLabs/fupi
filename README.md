@@ -2,9 +2,7 @@
 
 [![License](https://img.shields.io/github/license/sanctumlabs/fupi)](https://github.com/sanctumlabs/fupi/blob/main/LICENSE)
 [![Version](https://img.shields.io/github/v/release/sanctumlabs/fupi?color=%235351FB&label=version)](https://github.com/sanctumlabs/fupi/releases)
-[![Tests](https://github.com/sanctumlabs/fupi/actions/workflows/tests.yml/badge.svg)](https://github.com/sanctumlabs/fupi/actions/workflows/tests.yml)
-[![Lint](https://github.com/sanctumlabs/fupi/actions/workflows/lint.yml/badge.svg)](https://github.com/sanctumlabs/fupi/actions/workflows/lint.yml)
-[![Build](https://github.com/sanctumlabs/fupi/actions/workflows/build_app.yml/badge.svg)](https://github.com/sanctumlabs/fupi/actions/workflows/build_app.yml)
+[![CI](https://github.com/sanctumlabs/fupi/actions/workflows/ci.yml/badge.svg)](https://github.com/sanctumlabs/fupi/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sanctumlabs/fupi/branch/develop/graph/badge.svg?token=RNg0UoESug)](https://codecov.io/gh/sanctumlabs/fupi)
 [![Go](https://img.shields.io/badge/Go-1.18-blue.svg)](https://go.dev/)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/be035defd2d44675bddf744a88d1a2d5)](https://www.codacy.com/gh/SanctumLabs/fupi/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=SanctumLabs/fupi&amp;utm_campaign=Badge_Grade)
