@@ -58,6 +58,7 @@ func MapUserModelToEntity(userModel postgresql.User) (identity.User, error) {
 		LastName:            userModel.LastName.String,
 		Email:               userModel.Email,
 		Status:              identity.UserStatus(userModel.Status),
+		Role:                identity.UserRole(userModel.Role),
 		VerificationToken:   userModel.VerificationToken.String,
 		VerificationExpires: userModel.VerificationExpires.Time,
 		Verified:            userModel.Verified,

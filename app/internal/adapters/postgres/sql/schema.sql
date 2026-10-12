@@ -54,6 +54,9 @@ CREATE SEQUENCE IF NOT EXISTS short_code_counter
 -- are owned by the User aggregate (ADR-0008).
 CREATE TYPE user_status AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'DELETED');
 
+-- User role is an enum too; only admins may reinstate suspended urls (ADR-0022).
+CREATE TYPE user_role AS ENUM ('user', 'admin');
+
 CREATE TABLE IF NOT EXISTS users (
     id                   UUID PRIMARY KEY NOT NULL,
     username             VARCHAR(50)  NOT NULL UNIQUE,
@@ -68,7 +71,8 @@ CREATE TABLE IF NOT EXISTS users (
     metadata             JSON NULL,
     created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at           TIMESTAMPTZ NULL
+    deleted_at           TIMESTAMPTZ NULL,
+    role                 user_role    NOT NULL DEFAULT 'user'
 );
 
 CREATE UNIQUE INDEX idx_users_email ON users (email);
@@ -87,6 +91,7 @@ COMMENT ON COLUMN users.status IS 'User account status; SUSPENDED and DELETED us
 COMMENT ON COLUMN users.metadata IS 'Additional user metadata stored as JSON.';
 COMMENT ON COLUMN users.created_at IS 'Timestamp when the user account was created.';
 COMMENT ON COLUMN users.updated_at IS 'Timestamp when the user account was last updated.';
+COMMENT ON COLUMN users.role IS 'User role; only admins may reinstate suspended urls. Set by SQL only.';
 
 
 -- API keys (Identity context)
