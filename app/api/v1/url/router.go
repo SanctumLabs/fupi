@@ -3,6 +3,7 @@
 package urlapi
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 
@@ -14,20 +15,26 @@ import (
 // characters) or a custom alias (3-12 alphanumerics and dashes). The auth middleware exempts exactly these paths.
 var RedirectPathPattern = regexp.MustCompile(`^/[a-zA-Z0-9-]{3,12}$`)
 
+// AdminChecker says whether a user is an admin right now.
+type AdminChecker interface {
+	IsAdmin(ctx context.Context, userID string) (bool, error)
+}
+
 type urlRouter struct {
 	svc          *urlapp.Service
+	admins       AdminChecker
 	routes       []router.Route
 	baseUri      string
 	shortBaseURL string
 }
 
 // NewRouter creates the URL HTTP routes: management under baseUri and the redirect at the root. shortBaseURL is the
-// externally visible address short urls are built on.
+// externally visible address short urls are built on. admins decides who may reinstate a suspended url.
 //
 // Register it after every other router: the redirect matches any single-segment path, and Fiber serves the first route
 // that matches.
-func NewRouter(baseUri, shortBaseURL string, svc *urlapp.Service) router.Router {
-	rtr := &urlRouter{svc: svc, baseUri: baseUri, shortBaseURL: shortBaseURL}
+func NewRouter(baseUri, shortBaseURL string, svc *urlapp.Service, admins AdminChecker) router.Router {
+	rtr := &urlRouter{svc: svc, admins: admins, baseUri: baseUri, shortBaseURL: shortBaseURL}
 	rtr.initRoutes()
 	return rtr
 }
@@ -43,6 +50,7 @@ func (rtr *urlRouter) initRoutes() {
 		router.NewGetRoute(fmt.Sprintf("%s/urls/:id", rtr.baseUri), rtr.get),
 		router.NewPatchRoute(fmt.Sprintf("%s/urls/:id", rtr.baseUri), rtr.update),
 		router.NewDeleteRoute(fmt.Sprintf("%s/urls/:id", rtr.baseUri), rtr.delete),
+		router.NewPostRoute(fmt.Sprintf("%s/urls/:id/reinstate", rtr.baseUri), rtr.reinstate),
 		router.NewGetRoute("/:code", rtr.redirect),
 	}
 }

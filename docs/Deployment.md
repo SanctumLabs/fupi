@@ -93,6 +93,7 @@ docker run -p 8086:8086 -e DATABASE_HOST=... -e DATABASE_NAME=... -e DATABASE_US
 | `EXPIRY_INTERVAL` | `60` | seconds between runs of the URL expiry job (at least 1); one active instance, elected like the relay |
 | `EXPIRY_BATCH_SIZE` | `100` | URLs the expiry job loads and expires per batch (1 to 1000) |
 | `WORKER_HTTP_PORT` | `8086` | the health listener |
+| `SAFE_BROWSING_API_KEY` | unset | Google Safe Browsing key; when set, the worker scans every created url and suspends flagged ones (ADR-0022), and then also needs the `REDIS_*` and `REDIRECT_CACHE_*` settings. Unset, it does not scan |
 
 The database, logging and telemetry variables are the API's; the worker's service name defaults to `fupi-worker`.
 

@@ -29,8 +29,19 @@ const (
 	shortBaseURL = "https://fu.pi/"
 )
 
+// fakeAdmins is an AdminChecker that knows one admin, or fails.
+type fakeAdmins struct {
+	adminID string
+	err     error
+}
+
+func (f fakeAdmins) IsAdmin(_ context.Context, userID string) (bool, error) {
+	return f.err == nil && userID == f.adminID, f.err
+}
+
 type UrlHandlersTestSuite struct {
 	suite.Suite
+	admins        *fakeAdmins
 	mockCtrl      *gomock.Controller
 	mockUrls      *urlmock.MockUrlDatastore
 	mockGenerator *mockports.MockShortCodeGenerator
@@ -47,6 +58,7 @@ func (suite *UrlHandlersTestSuite) SetupTest() {
 	suite.mockUrls = urlmock.NewMockUrlDatastore(suite.mockCtrl)
 	suite.mockGenerator = mockports.NewMockShortCodeGenerator(suite.mockCtrl)
 	suite.userID = entity.IDToString(entity.NewID())
+	suite.admins = &fakeAdmins{}
 
 	svc := urlapp.NewService(suite.mockUrls, suite.mockGenerator)
 
@@ -58,7 +70,7 @@ func (suite *UrlHandlersTestSuite) SetupTest() {
 		}
 		return ctx.Next()
 	})
-	for _, route := range NewRouter(baseURI, shortBaseURL, svc).Routes() {
+	for _, route := range NewRouter(baseURI, shortBaseURL, svc, suite.admins).Routes() {
 		app.Add(route.Method(), route.Path(), route.Handler())
 	}
 	suite.app = app
@@ -301,6 +313,71 @@ func (suite *UrlHandlersTestSuite) TestDelete_Returns204() {
 	status, _, _ := suite.do("DELETE", baseURI+"/urls/"+id, "")
 
 	suite.Equal(fiber.StatusNoContent, status)
+}
+
+// --- POST /urls/:id/reinstate -----------------------------------------------------------------
+
+func (suite *UrlHandlersTestSuite) TestReinstate_AnAdminReinstatesASuspendedUrl() {
+	suspended := suite.ownedUrl(urlmock.WithStatus(url.URLStatusSuspended))
+	id := entity.IDToString(suspended.ID())
+	suite.admins.adminID = suite.userID
+	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(suspended, nil)
+	suite.mockUrls.EXPECT().Update(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, u url.URL) (url.URL, error) {
+			suite.Equal(url.URLStatusActive, u.Status())
+			return u, nil
+		})
+
+	status, _, _ := suite.do("POST", baseURI+"/urls/"+id+"/reinstate", "")
+
+	suite.Equal(fiber.StatusNoContent, status)
+}
+
+func (suite *UrlHandlersTestSuite) TestReinstate_ANonAdminIs403AndNothingIsTouched() {
+	suite.admins.adminID = "someone-else"
+
+	status, _, _ := suite.do("POST", baseURI+"/urls/"+entity.IDToString(entity.NewID())+"/reinstate", "")
+
+	suite.Equal(fiber.StatusForbidden, status)
+}
+
+func (suite *UrlHandlersTestSuite) TestReinstate_AnUnauthenticatedCallerIs401() {
+	req := httptest.NewRequest("POST", baseURI+"/urls/"+entity.IDToString(entity.NewID())+"/reinstate", nil)
+
+	resp, err := suite.app.Test(req)
+
+	suite.Require().NoError(err)
+	suite.Equal(fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func (suite *UrlHandlersTestSuite) TestReinstate_AFailedAdminLookupIs500NotAGrant() {
+	suite.admins.adminID = suite.userID
+	suite.admins.err = errors.New("connection refused")
+
+	status, _, _ := suite.do("POST", baseURI+"/urls/"+entity.IDToString(entity.NewID())+"/reinstate", "")
+
+	suite.Equal(fiber.StatusInternalServerError, status)
+}
+
+func (suite *UrlHandlersTestSuite) TestReinstate_AUrlThatIsNotSuspendedIs409() {
+	active := suite.ownedUrl()
+	id := entity.IDToString(active.ID())
+	suite.admins.adminID = suite.userID
+	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(active, nil)
+
+	status, _, _ := suite.do("POST", baseURI+"/urls/"+id+"/reinstate", "")
+
+	suite.Equal(fiber.StatusConflict, status)
+}
+
+func (suite *UrlHandlersTestSuite) TestReinstate_AnUnknownUrlIs404() {
+	id := entity.IDToString(entity.NewID())
+	suite.admins.adminID = suite.userID
+	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(url.URL{}, errdefs.NotFound(errors.New("no rows")))
+
+	status, _, _ := suite.do("POST", baseURI+"/urls/"+id+"/reinstate", "")
+
+	suite.Equal(fiber.StatusNotFound, status)
 }
 
 // --- GET /:code -------------------------------------------------------------------------------

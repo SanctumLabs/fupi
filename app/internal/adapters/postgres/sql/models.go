@@ -56,6 +56,48 @@ func (ns NullUrlStatus) Value() (driver.Value, error) {
 	return string(ns.UrlStatus), nil
 }
 
+type UserRole string
+
+const (
+	UserRoleUser  UserRole = "user"
+	UserRoleAdmin UserRole = "admin"
+)
+
+func (e *UserRole) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UserRole(s)
+	case string:
+		*e = UserRole(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UserRole: %T", src)
+	}
+	return nil
+}
+
+type NullUserRole struct {
+	UserRole UserRole `json:"user_role"`
+	Valid    bool     `json:"valid"` // Valid is true if UserRole is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUserRole) Scan(value interface{}) error {
+	if value == nil {
+		ns.UserRole, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UserRole.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUserRole) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UserRole), nil
+}
+
 type UserStatus string
 
 const (
@@ -278,6 +320,8 @@ type User struct {
 	// Timestamp when the user account was last updated.
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	DeletedAt pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
+	// User role; only admins may reinstate suspended urls. Set by SQL only.
+	Role UserRole `db:"role" json:"role"`
 }
 
 // Represents webhook subscriptions for URL events.

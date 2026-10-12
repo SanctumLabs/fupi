@@ -107,10 +107,28 @@ func TestLoadWorker_RefusesTheDevelopmentDatabasePasswordOutsideDevelopmentAndTe
 	assert.NoError(t, err)
 }
 
-func TestLoadWorker_NeedsNoAuthSecretAndNoRedis(t *testing.T) {
-	_, err := LoadWorker(lookupOf(map[string]string{"ENVIRONMENT": "production", "DATABASE_PASSWORD": "a-real-password"}))
+func TestLoadWorker_NeedsNoAuthSecretAndNoRedisWhileScanningIsOff(t *testing.T) {
+	worker, err := LoadWorker(lookupOf(map[string]string{"ENVIRONMENT": "production", "DATABASE_PASSWORD": "a-real-password"}))
 
-	assert.NoError(t, err, "the worker reads neither AUTH_SECRET nor REDIS_*")
+	assert.NoError(t, err, "the worker reads neither AUTH_SECRET nor REDIS_* unless it scans")
+	assert.False(t, worker.Security.ScanningEnabled())
+	assert.Empty(t, worker.Security.SafeBrowsingAPIKey)
+}
+
+func TestLoadWorker_AnApiKeyTurnsScanningOnAndNeedsRedis(t *testing.T) {
+	worker, err := LoadWorker(lookupOf(map[string]string{"SAFE_BROWSING_API_KEY": "a-key", "REDIS_ADDRESS": "redis-1:6379", "REDIRECT_CACHE_TTL": "60"}))
+	require.NoError(t, err)
+
+	assert.True(t, worker.Security.ScanningEnabled())
+	assert.Equal(t, "a-key", worker.Security.SafeBrowsingAPIKey)
+	assert.Equal(t, []string{"redis-1:6379"}, worker.Redis.Address)
+	assert.Equal(t, 60*time.Second, worker.RedirectCache.TTL)
+
+	_, err = LoadWorker(lookupOf(map[string]string{"SAFE_BROWSING_API_KEY": "a-key", "REDIS_ADDRESS": "no-port"}))
+	assert.ErrorContains(t, err, "REDIS_ADDRESS")
+
+	_, err = LoadWorker(lookupOf(map[string]string{"ENVIRONMENT": "production", "DATABASE_PASSWORD": "a-real-password", "SAFE_BROWSING_API_KEY": "a-key"}))
+	assert.ErrorContains(t, err, "REDIS_PASSWORD", "scanning evicts the redirect cache, so Redis is held to the API's rules")
 }
 
 func TestLoadWorker_WarnsWhenEnvironmentIsUnsetAndTheDevelopmentPasswordIsInUse(t *testing.T) {

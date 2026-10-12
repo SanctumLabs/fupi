@@ -1,6 +1,7 @@
 // Command worker runs the Fupi background worker: the outbox relay, one leader-elected process that delivers the
-// transactional outbox (ADR-0011) to Kafka with at-least-once delivery, and the URL expiry job, also leader-elected. The
-// API never talks to Kafka (ADR-0015).
+// transactional outbox (ADR-0011) to Kafka with at-least-once delivery, the URL expiry job, also leader-elected, and,
+// when a Safe Browsing key is set, the url scanner that consumes url.created and suspends flagged urls. The API never
+// talks to Kafka for the outbox (ADR-0015).
 package main
 
 import (
@@ -213,6 +214,14 @@ func run(ctx context.Context, cfg config.Worker) error {
 	registry.Add(health.Check{Name: "postgres", Required: true, Fn: dbClient.HealthCheck})
 	registry.Add(health.Check{Name: "kafka", Required: true, Fn: publisher.Ping})
 
+	scanner, err := newScanning(ctx, cfg, dbClient, registry)
+	if err != nil {
+		return err
+	}
+	if scanner != nil {
+		defer scanner.close()
+	}
+
 	listener, err := net.Listen("tcp", net.JoinHostPort(cfg.Health.Host, strconv.Itoa(cfg.Health.Port)))
 	if err != nil {
 		return fmt.Errorf("listen on port %d: %w", cfg.Health.Port, err)
@@ -232,8 +241,15 @@ func run(ctx context.Context, cfg config.Worker) error {
 	expiryDone := make(chan error, 1)
 	go func() { expiryDone <- expiry.Run(runCtx) }()
 
+	// A nil channel never receives, so without a scanner the select below and the shutdown wait ignore it.
+	var scannerDone chan error
+	if scanner != nil {
+		scannerDone = make(chan error, 1)
+		go func() { scannerDone <- scanner.consumer.Run(runCtx, scanner.handler) }()
+	}
+
 	var runErr error
-	relayExited := false
+	relayExited, scannerExited := false, false
 	select {
 	case <-ctx.Done():
 	case err := <-healthErr:
@@ -243,9 +259,16 @@ func run(ctx context.Context, cfg config.Worker) error {
 	case err := <-relayDone:
 		relayExited = true
 		runErr = fmt.Errorf("the relay stopped unexpectedly: %w", err)
+	case err := <-scannerDone:
+		scannerExited = true
+		// The scanner also returns when the context ends, which races with the case above.
+		if ctx.Err() == nil {
+			runErr = fmt.Errorf("the url scanner stopped unexpectedly: %w", err)
+		}
 	}
 
-	// Shutdown: readiness turns to 503, then the relay finishes the batch it has in flight (bounded by the publish timeout).
+	// Shutdown: readiness turns to 503, then the relay finishes the batch it has in flight (bounded by the publish timeout)
+	// and the scanner the record it is handling (bounded by the scan's timeouts).
 	registry.SetDraining()
 	slog.Info("shutting down the worker", "timeout", cfg.ShutdownTimeout.String())
 	stopRelay()
@@ -256,6 +279,13 @@ func run(ctx context.Context, cfg config.Worker) error {
 		case <-relayDone:
 		case <-stopped.Done():
 			runErr = errors.Join(runErr, fmt.Errorf("the relay did not stop within %s", cfg.ShutdownTimeout))
+		}
+	}
+	if scanner != nil && !scannerExited {
+		select {
+		case <-scannerDone:
+		case <-stopped.Done():
+			runErr = errors.Join(runErr, fmt.Errorf("the url scanner did not stop within %s", cfg.ShutdownTimeout))
 		}
 	}
 	select {

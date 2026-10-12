@@ -252,7 +252,7 @@ func run(ctx context.Context, cfg config.App) error {
 		probes.NewRouter(registry),
 		identityapi.NewRouter(baseURI, identityService),
 		// Last: its redirect matches any single-segment path.
-		urlapi.NewRouter(baseURI, cfg.Server.BaseURL, urlService),
+		urlapi.NewRouter(baseURI, cfg.Server.BaseURL, urlService, identityService),
 	})
 
 	serveErr := srv.Serve(ctx, cfg.ShutdownTimeout, registry.SetDraining)
