@@ -298,6 +298,25 @@ func TestLease_IsLostWhenItsConnectionIsKilledAndTheHolderNoticesOnItsNextCheck(
 	other.Release()
 }
 
+func TestLeaser_LeasesWithDifferentNamesAreIndependent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	expiry, err := outboxdatastore.NewLeaser(f.pool.Config().ConnString(), "fupi.url.expiry", "fupi-url-expiry-lease",
+		10*time.Second, outboxdatastore.DefaultLeaseIdleTimeout)
+	require.NoError(t, err)
+
+	relay, err := f.adapter.Acquire(ctx)
+	require.NoError(t, err)
+	t.Cleanup(relay.Release)
+
+	held, err := expiry.Acquire(ctx)
+	require.NoError(t, err, "the relay's lease does not block the expiry job's")
+	t.Cleanup(held.Release)
+
+	_, err = expiry.Acquire(ctx)
+	assert.ErrorIs(t, err, ports.ErrNotLeader, "a second expiry job does not get its lease")
+}
+
 // A holder whose host or network dies without closing the connection (no FIN, no RST) leaves a backend that never notices:
 // without a server-side limit it would keep the lock for hours and no standby could take over. The lease connection asks the
 // server to drop it after it has sat idle for a while; a holder that checks its lease regularly is never idle that long.
