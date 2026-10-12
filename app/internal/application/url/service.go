@@ -9,16 +9,16 @@ import (
 
 // Service exposes the Url use cases.
 type Service struct {
-	url                url.UrlDatastore
+	urls               url.UrlDatastore
 	shortCodeGenerator ports.ShortCodeGenerator
 	tracer             trace.Tracer
 	logPrefix          string
 }
 
 // NewService wires the Url use cases to their ports.
-func NewService(url url.UrlDatastore, shortCodeGenerator ports.ShortCodeGenerator) *Service {
+func NewService(urls url.UrlDatastore, shortCodeGenerator ports.ShortCodeGenerator) *Service {
 	return &Service{
-		url:                url,
+		urls:               urls,
 		shortCodeGenerator: shortCodeGenerator,
 		tracer:             otel.Tracer(instrumentationName),
 		logPrefix:          "UrlService",
