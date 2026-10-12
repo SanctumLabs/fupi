@@ -58,8 +58,43 @@ func (repo *urlReadDatastoreAdapter) fetchOne(
 				return url.URL{}, errdefs.BadRequest(queryErr)
 			}
 
-			return MapUrlModelToEntity(urlModel)
+			urls, mapErr := mapUrls(ctx, qtx, []postgresql.Url{urlModel})
+			if mapErr != nil {
+				return url.URL{}, mapErr
+			}
+			return urls[0], nil
 		})
+}
+
+// mapUrls maps url rows onto entities, loading the keywords of all of them in one query.
+func mapUrls(ctx context.Context, qtx postgresrepo.UrlReadQuerier, urlModels []postgresql.Url) ([]url.URL, error) {
+	if len(urlModels) == 0 {
+		return []url.URL{}, nil
+	}
+
+	ids := make([]pgtype.UUID, 0, len(urlModels))
+	for _, urlModel := range urlModels {
+		ids = append(ids, urlModel.ID)
+	}
+
+	keywordRows, keywordsErr := qtx.QueryActiveKeywordsByUrlIds(ctx, ids)
+	if keywordsErr != nil {
+		return nil, fmt.Errorf("failed to load url keywords: %w", keywordsErr)
+	}
+	keywordsByUrl := make(map[[16]byte][]string, len(urlModels))
+	for _, row := range keywordRows {
+		keywordsByUrl[row.Keyword.UrlID.Bytes] = append(keywordsByUrl[row.Keyword.UrlID.Bytes], row.Keyword.Value)
+	}
+
+	urls := make([]url.URL, 0, len(urlModels))
+	for _, urlModel := range urlModels {
+		urlEntity, mapErr := MapUrlModelToEntity(urlModel, keywordsByUrl[urlModel.ID.Bytes])
+		if mapErr != nil {
+			return nil, mapErr
+		}
+		urls = append(urls, urlEntity)
+	}
+	return urls, nil
 }
 
 func (repo *urlReadDatastoreAdapter) FetchById(ctx context.Context, id string) (url.URL, error) {
@@ -221,16 +256,12 @@ func (repo *urlReadDatastoreAdapter) FetchExpiredActive(ctx context.Context, bef
 				return nil, errdefs.BadRequest(queryErr)
 			}
 
-			urls := make([]url.URL, 0, len(rows))
+			urlModels := make([]postgresql.Url, 0, len(rows))
 			for _, row := range rows {
-				urlEntity, mapErr := MapUrlModelToEntity(row.Url)
-				if mapErr != nil {
-					return nil, mapErr
-				}
-				urls = append(urls, urlEntity)
+				urlModels = append(urlModels, row.Url)
 			}
 
-			return urls, nil
+			return mapUrls(ctx, qtx, urlModels)
 		})
 }
 
@@ -253,13 +284,9 @@ func (repo *urlReadDatastoreAdapter) fetchMany(
 				return repository.FetchRecordsResponse[url.URL]{}, errdefs.BadRequest(queryErr)
 			}
 
-			urls := make([]url.URL, 0, len(urlModels))
-			for _, urlModel := range urlModels {
-				urlEntity, mapErr := MapUrlModelToEntity(urlModel)
-				if mapErr != nil {
-					return repository.FetchRecordsResponse[url.URL]{}, mapErr
-				}
-				urls = append(urls, urlEntity)
+			urls, mapErr := mapUrls(ctx, qtx, urlModels)
+			if mapErr != nil {
+				return repository.FetchRecordsResponse[url.URL]{}, mapErr
 			}
 
 			page := 1

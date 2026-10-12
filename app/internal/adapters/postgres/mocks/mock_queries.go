@@ -57,6 +57,21 @@ func (mr *MockUrlWriteQuerierMockRecorder) QueryCreateKeyword(ctx, params any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryCreateKeyword", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryCreateKeyword), ctx, params)
 }
 
+// QueryCreateOutboxEvent mocks base method.
+func (m *MockUrlWriteQuerier) QueryCreateOutboxEvent(ctx context.Context, params postgresql.QueryCreateOutboxEventParams) (postgresql.OutboxEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryCreateOutboxEvent", ctx, params)
+	ret0, _ := ret[0].(postgresql.OutboxEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryCreateOutboxEvent indicates an expected call of QueryCreateOutboxEvent.
+func (mr *MockUrlWriteQuerierMockRecorder) QueryCreateOutboxEvent(ctx, params any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryCreateOutboxEvent", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryCreateOutboxEvent), ctx, params)
+}
+
 // QueryCreateUrl mocks base method.
 func (m *MockUrlWriteQuerier) QueryCreateUrl(ctx context.Context, params postgresql.QueryCreateUrlParams) (postgresql.Url, error) {
 	m.ctrl.T.Helper()
@@ -70,6 +85,35 @@ func (m *MockUrlWriteQuerier) QueryCreateUrl(ctx context.Context, params postgre
 func (mr *MockUrlWriteQuerierMockRecorder) QueryCreateUrl(ctx, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryCreateUrl", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryCreateUrl), ctx, params)
+}
+
+// QueryDeleteKeywordsByUrlId mocks base method.
+func (m *MockUrlWriteQuerier) QueryDeleteKeywordsByUrlId(ctx context.Context, urlID pgtype.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryDeleteKeywordsByUrlId", ctx, urlID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// QueryDeleteKeywordsByUrlId indicates an expected call of QueryDeleteKeywordsByUrlId.
+func (mr *MockUrlWriteQuerierMockRecorder) QueryDeleteKeywordsByUrlId(ctx, urlID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDeleteKeywordsByUrlId", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryDeleteKeywordsByUrlId), ctx, urlID)
+}
+
+// QueryUpdateUrl mocks base method.
+func (m *MockUrlWriteQuerier) QueryUpdateUrl(ctx context.Context, params postgresql.QueryUpdateUrlParams) (postgresql.Url, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryUpdateUrl", ctx, params)
+	ret0, _ := ret[0].(postgresql.Url)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryUpdateUrl indicates an expected call of QueryUpdateUrl.
+func (mr *MockUrlWriteQuerierMockRecorder) QueryUpdateUrl(ctx, params any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryUpdateUrl", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryUpdateUrl), ctx, params)
 }
 
 // MockUrlReadQuerier is a mock of UrlReadQuerier interface.
@@ -94,6 +138,21 @@ func NewMockUrlReadQuerier(ctrl *gomock.Controller) *MockUrlReadQuerier {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockUrlReadQuerier) EXPECT() *MockUrlReadQuerierMockRecorder {
 	return m.recorder
+}
+
+// QueryActiveKeywordsByUrlIds mocks base method.
+func (m *MockUrlReadQuerier) QueryActiveKeywordsByUrlIds(ctx context.Context, urlIds []pgtype.UUID) ([]postgresql.QueryActiveKeywordsByUrlIdsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryActiveKeywordsByUrlIds", ctx, urlIds)
+	ret0, _ := ret[0].([]postgresql.QueryActiveKeywordsByUrlIdsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryActiveKeywordsByUrlIds indicates an expected call of QueryActiveKeywordsByUrlIds.
+func (mr *MockUrlReadQuerierMockRecorder) QueryActiveKeywordsByUrlIds(ctx, urlIds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryActiveKeywordsByUrlIds", reflect.TypeOf((*MockUrlReadQuerier)(nil).QueryActiveKeywordsByUrlIds), ctx, urlIds)
 }
 
 // QueryAllUrls mocks base method.

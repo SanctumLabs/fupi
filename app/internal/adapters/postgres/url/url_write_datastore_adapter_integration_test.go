@@ -212,3 +212,53 @@ func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestSave_AllowsDistin
 	_, secondErr := suite.saveUrlForNewUser(ctx, urlmock.WithOriginalUrl("https://example.com/second-target"))
 	suite.Require().NoError(secondErr)
 }
+
+// TestUpdate_DeletingReplacesKeywordsAndReleasesTheTarget covers the soft delete end to end: the DELETED status sets
+// deleted_at, which releases the target for re-shortening, and the keywords are replaced rather than appended.
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestUpdate_DeletingReplacesKeywordsAndReleasesTheTarget() {
+	ctx, cancel := context.WithTimeout(context.Background(), suite.config.OperationTimeout)
+	defer cancel()
+
+	saved, saveErr := suite.saveUrlForNewUser(ctx,
+		urlmock.WithOriginalUrl("https://example.com/released-target"),
+		urlmock.WithKeywords([]string{"first", "second"}),
+	)
+	suite.Require().NoError(saveErr)
+
+	readDatastore := NewUrlReadDatastoreAdapter(suite.testPostgresDatabaseClient, suite.config)
+	stored, fetchErr := readDatastore.FetchById(ctx, saved.ID().String())
+	suite.Require().NoError(fetchErr)
+	suite.Require().Len(stored.Keywords(), 2, "the read side must load the keywords Save wrote")
+
+	suite.Require().NoError(stored.SetKeywords([]string{"third"}))
+	suite.Require().NoError(stored.MarkDeleted())
+	updated, updateErr := suite.urlWriteDatastoreAdapter.Update(ctx, stored)
+	suite.Require().NoError(updateErr)
+	suite.Equal(domainurl.URLStatusDeleted, updated.Status())
+	suite.NotNil(updated.DeletedAt(), "the DELETED status must set deleted_at")
+
+	reread, rereadErr := readDatastore.FetchById(ctx, saved.ID().String())
+	suite.Require().NoError(rereadErr)
+	suite.Require().Len(reread.Keywords(), 1)
+	suite.Equal("third", reread.Keywords()[0].Value)
+
+	_, reshortenErr := suite.saveUrlForNewUser(ctx, urlmock.WithOriginalUrl("https://example.com/released-target"))
+	suite.NoError(reshortenErr, "a deleted url must release its target")
+}
+
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestUpdate_ChangesTheExpiry() {
+	ctx, cancel := context.WithTimeout(context.Background(), suite.config.OperationTimeout)
+	defer cancel()
+
+	saved, saveErr := suite.saveUrlForNewUser(ctx)
+	suite.Require().NoError(saveErr)
+
+	newExpiry := time.Now().Add(72 * time.Hour)
+	suite.Require().NoError(saved.UpdateExpiry(newExpiry))
+	updated, updateErr := suite.urlWriteDatastoreAdapter.Update(ctx, saved)
+	suite.Require().NoError(updateErr)
+
+	suite.WithinDuration(newExpiry, updated.ExpiresOn(), time.Microsecond)
+	suite.Equal(domainurl.URLStatusActive, updated.Status())
+	suite.Nil(updated.DeletedAt())
+}

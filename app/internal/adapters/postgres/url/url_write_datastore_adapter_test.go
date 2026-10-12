@@ -6,11 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockpostgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/mocks"
 	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
 	mockpostgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql/mocks"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
 	mockidentity "github.com/sanctumlabs/fupi/app/internal/domain/identity/mocks"
+	domainurl "github.com/sanctumlabs/fupi/app/internal/domain/url"
 	urlmock "github.com/sanctumlabs/fupi/app/internal/domain/url/mocks"
 	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
@@ -137,21 +141,103 @@ func (suite *UrlWriteDatastoreAdapterTestSuite) TestCreate_FailsWhenKeywordCanno
 }
 
 // TestUnimplementedWrites_ReportNotImplemented tests that writes which are not built yet fail
-// loudly instead of reporting success or panicking
+// loudly instead of reporting success or panicking. Deleting a URL goes through Update with the
+// aggregate's DELETED status, so these two have no caller.
 func (suite *UrlWriteDatastoreAdapterTestSuite) TestUnimplementedWrites_ReportNotImplemented() {
 	ctx := context.Background()
+	id := entity.NewID().String()
 
+	suite.True(errdefs.IsNotImplemented(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, id)))
+	suite.True(errdefs.IsNotImplemented(suite.urlWriteDatastoreAdapter.Delete(ctx, id)))
+}
+
+// TestSave_WritesRecordedEventsToTheOutbox asserts URLCreated is written in the same transaction as the url.
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestSave_WritesRecordedEventsToTheOutbox() {
+	shortCode, shortCodeErr := domainurl.NewShortCode("abc1234")
+	suite.Require().NoError(shortCodeErr)
+	created, createErr := domainurl.Create(domainurl.CreateURLParams{
+		UserId:      entity.NewID().String(),
+		ShortCode:   shortCode,
+		OriginalUrl: "https://example.com/some/long/path",
+		ExpiresOn:   time.Now().Add(time.Hour),
+		Keywords:    []string{"docs"},
+	})
+	suite.Require().NoError(createErr)
+
+	suite.mockUrlWriteQuerier.EXPECT().
+		QueryCreateUrl(gomock.Any(), gomock.Any()).
+		Return(mockpostgresql.MockUrl(mockpostgresql.WithUrl(*created)), nil).
+		Times(1)
+	suite.mockUrlWriteQuerier.EXPECT().
+		QueryCreateKeyword(gomock.Any(), gomock.Any()).
+		Times(1)
+	suite.mockUrlWriteQuerier.EXPECT().
+		QueryCreateOutboxEvent(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, params postgresql.QueryCreateOutboxEventParams) (postgresql.OutboxEvent, error) {
+			suite.Equal("url.created", params.EventType)
+			suite.Equal("url.events", params.Destination)
+			suite.Equal(entity.IDToString(created.ID()), params.PartitionKey.String)
+			return postgresql.OutboxEvent{}, nil
+		}).
+		Times(1)
+
+	actual, err := suite.urlWriteDatastoreAdapter.Save(context.Background(), *created)
+	suite.Require().NoError(err)
+	suite.Require().Len(actual.Keywords(), 1)
+	suite.Equal("docs", actual.Keywords()[0].Value)
+	suite.Empty(actual.DomainEvents(), "the returned url must not carry events that are already in the outbox")
+}
+
+// TestUpdate_PersistsStatusExpiryKeywordsAndEvents asserts a deleted url is written with its status, its keywords are
+// replaced and URLDeleted reaches the outbox, all through the one querier the transaction is bound to.
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestUpdate_PersistsStatusExpiryKeywordsAndEvents() {
 	mockUrl, mockUrlErr := urlmock.MockUrl(
 		urlmock.WithExpiresOn(time.Now().Add(time.Hour*24)),
-		urlmock.WithCustomAlias("custom"),
-		urlmock.WithShortCode("shortcode"),
+		urlmock.WithKeywords([]string{"one", "two"}),
 	)
 	suite.Require().NoError(mockUrlErr)
+	suite.Require().NoError(mockUrl.MarkDeleted())
 
-	_, updateErr := suite.urlWriteDatastoreAdapter.Update(ctx, *mockUrl)
-	suite.True(errdefs.IsNotImplemented(updateErr), "expected NotImplemented, got %v", updateErr)
-	suite.True(errdefs.IsNotImplemented(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, mockUrl.ID().String())))
-	suite.True(errdefs.IsNotImplemented(suite.urlWriteDatastoreAdapter.Delete(ctx, mockUrl.ID().String())))
+	urlID := pgtype.UUID{Bytes: mockUrl.ID(), Valid: true}
+	updatedRow := mockpostgresql.MockUrl(mockpostgresql.WithUrl(*mockUrl), mockpostgresql.WithStatus(postgresql.UrlStatusDELETED))
+	updatedRow.ID = urlID
+
+	gomock.InOrder(
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryUpdateUrl(gomock.Any(), postgresql.QueryUpdateUrlParams{
+				ID:        urlID,
+				Status:    postgresql.UrlStatusDELETED,
+				ExpiresOn: pgtype.Timestamptz{Time: mockUrl.ExpiresOn(), Valid: true},
+			}).
+			Return(updatedRow, nil),
+		suite.mockUrlWriteQuerier.EXPECT().QueryDeleteKeywordsByUrlId(gomock.Any(), urlID).Return(nil),
+		suite.mockUrlWriteQuerier.EXPECT().QueryCreateKeyword(gomock.Any(), postgresql.QueryCreateKeywordParams{UrlID: urlID, Value: "one"}),
+		suite.mockUrlWriteQuerier.EXPECT().QueryCreateKeyword(gomock.Any(), postgresql.QueryCreateKeywordParams{UrlID: urlID, Value: "two"}),
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryCreateOutboxEvent(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, params postgresql.QueryCreateOutboxEventParams) (postgresql.OutboxEvent, error) {
+				suite.Equal("url.deleted", params.EventType)
+				return postgresql.OutboxEvent{}, nil
+			}),
+	)
+
+	actual, err := suite.urlWriteDatastoreAdapter.Update(context.Background(), *mockUrl)
+	suite.Require().NoError(err)
+	suite.Equal(domainurl.URLStatusDeleted, actual.Status())
+	suite.Len(actual.Keywords(), 2)
+}
+
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestUpdate_MissingUrlIsNotFound() {
+	mockUrl, mockUrlErr := urlmock.MockUrl(urlmock.WithExpiresOn(time.Now().Add(time.Hour * 24)))
+	suite.Require().NoError(mockUrlErr)
+
+	suite.mockUrlWriteQuerier.EXPECT().
+		QueryUpdateUrl(gomock.Any(), gomock.Any()).
+		Return(postgresql.Url{}, pgx.ErrNoRows).
+		Times(1)
+
+	_, err := suite.urlWriteDatastoreAdapter.Update(context.Background(), *mockUrl)
+	suite.True(errdefs.IsNotFound(err), "expected NotFound, got %v", err)
 }
 
 // TestSave_MapsOriginalUrlUniqueViolationToConflict covers the global uniqueness rule on

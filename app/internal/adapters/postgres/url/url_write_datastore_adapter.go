@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
 	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
 	"github.com/sanctumlabs/fupi/app/internal/domain/url"
 	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
@@ -103,45 +105,102 @@ func (repo *urlWriteDatastoreAdapter) Save(ctx context.Context, urlEntity url.UR
 			return url.URL{}, fmt.Errorf("failed to create URL: %w", createdUrlErr)
 		}
 
-		// Insert associated keywords for the created URL
-		for _, keyword := range urlEntity.Keywords() {
-			_, createKeywordErr := qtx.QueryCreateKeyword(retryCtx, postgresql.QueryCreateKeywordParams{
-				UrlID: createdUrl.ID,
-				Value: keyword.Value,
-			})
-			if createKeywordErr != nil {
-				slog.ErrorContext(
-					retryCtx,
-					fmt.Sprintf("%s Failed to create keyword for URL", handlerLogPrefix),
-					"url_id", createdUrl.ID,
-					"keyword", keyword.Value,
-					"error", createKeywordErr,
-				)
-				// A failed statement aborts the transaction, and ADR-0003 forbids silently dropping a keyword.
-				return url.URL{}, fmt.Errorf("failed to create keyword %q for URL: %w", keyword.Value, createKeywordErr)
-			}
+		keywords, keywordsErr := createKeywords(retryCtx, handlerLogPrefix, qtx, createdUrl.ID, urlEntity.Keywords())
+		if keywordsErr != nil {
+			return url.URL{}, keywordsErr
 		}
 
-		// Map the created URL model back to an entity to return
-		mappedUrl, mapErr := MapUrlModelToEntity(createdUrl)
-		if mapErr != nil {
-			slog.ErrorContext(
-				retryCtx,
-				fmt.Sprintf("%s Failed to map created URL model to entity", handlerLogPrefix),
-				"url_model", createdUrl,
-				"error", mapErr,
-			)
-			return url.URL{}, fmt.Errorf("failed to map created URL model to entity: %w", mapErr)
+		if outboxErr := writeEvents(retryCtx, qtx, urlEntity); outboxErr != nil {
+			return url.URL{}, outboxErr
 		}
-		slog.InfoContext(retryCtx, "created model", "url", mappedUrl)
 
-		return mappedUrl, nil
+		return mapUrl(retryCtx, handlerLogPrefix, createdUrl, keywords)
 	})
 }
 
-// Update is not implemented yet. It fails loudly rather than reporting a write that never happened.
+// Update persists the state the URL aggregate owns after a change: its status, expiry and keywords, with the events
+// it recorded, in one transaction. The keywords are replaced wholesale, so the entity must carry all of them.
 func (repo *urlWriteDatastoreAdapter) Update(ctx context.Context, urlEntity url.URL) (url.URL, error) {
-	return url.URL{}, errdefs.NotImplemented(errors.New("url update is not implemented"))
+	handlerLogPrefix := fmt.Sprintf("%s<Update>", repo.logPrefix)
+	slog.InfoContext(ctx, fmt.Sprintf("%s Updating URL", handlerLogPrefix), "url_id", urlEntity.ID(), "status", urlEntity.Status())
+
+	return postgresrepo.Execute(ctx, repo.config, fmt.Sprintf("%s.Update", repo.logPrefix), repo.withTx, func(retryCtx context.Context, qtx postgresrepo.UrlWriteQuerier) (url.URL, error) {
+		urlID := pgtype.UUID{Bytes: urlEntity.ID(), Valid: true}
+
+		updatedUrl, updateErr := qtx.QueryUpdateUrl(retryCtx, postgresql.QueryUpdateUrlParams{
+			ID:        urlID,
+			Status:    postgresql.UrlStatus(urlEntity.Status()),
+			ExpiresOn: pgtype.Timestamptz{Time: urlEntity.ExpiresOn(), Valid: !urlEntity.ExpiresOn().IsZero()},
+		})
+		if updateErr != nil {
+			slog.ErrorContext(retryCtx, fmt.Sprintf("%s Failed to update URL", handlerLogPrefix), "url_id", urlEntity.ID(), "error", updateErr)
+			if errors.Is(updateErr, pgx.ErrNoRows) {
+				return url.URL{}, errdefs.NotFound(updateErr)
+			}
+			return url.URL{}, fmt.Errorf("failed to update URL %s: %w", urlEntity.ID(), updateErr)
+		}
+
+		if deleteErr := qtx.QueryDeleteKeywordsByUrlId(retryCtx, urlID); deleteErr != nil {
+			slog.ErrorContext(retryCtx, fmt.Sprintf("%s Failed to clear URL keywords", handlerLogPrefix), "url_id", urlEntity.ID(), "error", deleteErr)
+			return url.URL{}, fmt.Errorf("failed to clear keywords of URL %s: %w", urlEntity.ID(), deleteErr)
+		}
+
+		keywords, keywordsErr := createKeywords(retryCtx, handlerLogPrefix, qtx, urlID, urlEntity.Keywords())
+		if keywordsErr != nil {
+			return url.URL{}, keywordsErr
+		}
+
+		if outboxErr := writeEvents(retryCtx, qtx, urlEntity); outboxErr != nil {
+			return url.URL{}, outboxErr
+		}
+
+		return mapUrl(retryCtx, handlerLogPrefix, updatedUrl, keywords)
+	})
+}
+
+// urlEventsDestination is where the URL context's domain events are published once relayed from the outbox.
+const urlEventsDestination = "url.events"
+
+// writeEvents appends the events the url aggregate recorded to the outbox, in the caller's transaction. The URL
+// returned by a write is re-mapped from the database and carries none, so events are never written twice.
+func writeEvents(ctx context.Context, qtx postgresrepo.UrlWriteQuerier, urlEntity url.URL) error {
+	return postgresrepo.WriteOutboxEvents(ctx, qtx, urlEventsDestination, entity.IDToString(urlEntity.ID()), urlEntity.DomainEvents())
+}
+
+// createKeywords inserts the keywords of a URL and returns their values. A failed statement aborts the transaction,
+// and ADR-0003 forbids silently dropping a keyword, so the first failure fails the whole write.
+func createKeywords(ctx context.Context, handlerLogPrefix string, qtx postgresrepo.UrlWriteQuerier, urlID pgtype.UUID, keywords []url.Keyword) ([]string, error) {
+	values := make([]string, 0, len(keywords))
+	for _, keyword := range keywords {
+		if _, createKeywordErr := qtx.QueryCreateKeyword(ctx, postgresql.QueryCreateKeywordParams{
+			UrlID: urlID,
+			Value: keyword.Value,
+		}); createKeywordErr != nil {
+			slog.ErrorContext(
+				ctx,
+				fmt.Sprintf("%s Failed to create keyword for URL", handlerLogPrefix),
+				"url_id", urlID,
+				"keyword", keyword.Value,
+				"error", createKeywordErr,
+			)
+			if conflictErr := asConflict(createKeywordErr); conflictErr != nil {
+				return nil, conflictErr
+			}
+			return nil, fmt.Errorf("failed to create keyword %q for URL: %w", keyword.Value, createKeywordErr)
+		}
+		values = append(values, keyword.Value)
+	}
+	return values, nil
+}
+
+// mapUrl maps a written url row back onto an entity, logging and wrapping any mapping failure.
+func mapUrl(ctx context.Context, handlerLogPrefix string, urlModel postgresql.Url, keywords []string) (url.URL, error) {
+	mappedUrl, mapErr := MapUrlModelToEntity(urlModel, keywords)
+	if mapErr != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to map URL model to entity", handlerLogPrefix), "url_id", urlModel.ID, "error", mapErr)
+		return url.URL{}, fmt.Errorf("failed to map URL model to entity: %w", mapErr)
+	}
+	return mappedUrl, nil
 }
 
 // SoftDelete is not implemented yet.
