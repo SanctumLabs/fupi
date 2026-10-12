@@ -150,6 +150,16 @@ func (suite *UrlHandlersTestSuite) TestCreate_InvalidUrlIs400() {
 	suite.Equal(fiber.StatusBadRequest, status)
 }
 
+func (suite *UrlHandlersTestSuite) TestCreate_AliasShapedLikeAShortCodeIs400() {
+	code, _ := url.NewShortCode("000abc")
+	suite.mockGenerator.EXPECT().Next(gomock.Any()).Return(code, nil)
+
+	status, body, _ := suite.do("POST", baseURI+"/urls", `{"original_url": "https://example.com/some/long/path", "custom_alias": "Abc1234", "expires_on": "2099-01-01T00:00:00Z"}`)
+
+	suite.Equal(fiber.StatusBadRequest, status)
+	suite.Contains(body["message"], "must not look like a short code")
+}
+
 func (suite *UrlHandlersTestSuite) TestCreate_AlreadyShortenedIs409WithoutTheDatabaseError() {
 	code, _ := url.NewShortCode("000abc")
 	suite.mockGenerator.EXPECT().Next(gomock.Any()).Return(code, nil)

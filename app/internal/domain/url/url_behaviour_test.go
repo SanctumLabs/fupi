@@ -85,6 +85,41 @@ func TestCreate(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects a custom alias shaped like a short code", func(t *testing.T) {
+		// 6 to 10 letters and digits is every length a short code can have: the 6-character codes issued before
+		// ADR-0019, the 7-character ones issued now and the longer ones its exhaustion plan adds.
+		for _, alias := range []string{"abcdef", "Abc1234", "abcd1234", "abcdefghij"} {
+			p := validCreateParams(t)
+			p.CustomAlias = alias
+			if _, err := Create(p); !errors.Is(err, errdefs.ErrCustomAliasLikeShortCode) {
+				t.Errorf("alias %q: err = %v, want ErrCustomAliasLikeShortCode", alias, err)
+			}
+		}
+	})
+
+	t.Run("accepts a custom alias no short code can equal", func(t *testing.T) {
+		for _, alias := range []string{"abc", "abcde", "my-alias", "abc-123", "abcdefghijk", "abcdefghijkl"} {
+			p := validCreateParams(t)
+			p.CustomAlias = alias
+			u, err := Create(p)
+			if err != nil {
+				t.Errorf("alias %q: unexpected error %v", alias, err)
+				continue
+			}
+			if u.CustomAlias().Value() != alias {
+				t.Errorf("alias = %q, want %q", u.CustomAlias().Value(), alias)
+			}
+		}
+	})
+
+	t.Run("still hydrates a stored alias shaped like a short code", func(t *testing.T) {
+		p := createValidURLParams()
+		p.CustomAlias = "abcdef"
+		if _, err := NewUrl(p); err != nil {
+			t.Errorf("NewUrl with a pre-existing code-shaped alias: %v", err)
+		}
+	})
+
 	t.Run("rejects a zero-value short code", func(t *testing.T) {
 		p := validCreateParams(t)
 		p.ShortCode = ShortCode{}
