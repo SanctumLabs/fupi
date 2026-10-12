@@ -77,3 +77,11 @@ type URLDeleted struct {
 	URLID     string
 	ShortCode string
 }
+
+// URLPurged means the url and everything attached to it were removed for good, for example on an erasure request. It
+// carries no owner and no target, so consumers can drop what they hold for the url without receiving personal data.
+type URLPurged struct {
+	baseEvent
+	URLID     string
+	ShortCode string
+}

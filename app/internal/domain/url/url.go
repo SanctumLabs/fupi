@@ -250,6 +250,16 @@ func (url *URL) MarkDeleted() error {
 	return nil
 }
 
+// Purge records URLPurged for a url that is about to be removed for good, whatever its status. It changes nothing on the
+// aggregate: removing the row is the datastore's job, in the same transaction as the event.
+func (url *URL) Purge() {
+	url.ApplyDomain(URLPurged{
+		baseEvent: newBaseEvent("url.purged"),
+		URLID:     entity.IDToString(url.ID()),
+		ShortCode: url.shortCode.Value(),
+	})
+}
+
 // UpdateExpiry sets a new expiry on an ACTIVE url. The new expiry must be in the future.
 func (url *URL) UpdateExpiry(expiresOn time.Time) error {
 	if url.status != URLStatusActive {

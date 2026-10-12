@@ -296,7 +296,7 @@ func (suite *UrlHandlersTestSuite) TestDelete_Returns204() {
 	owned := suite.ownedUrl()
 	id := entity.IDToString(owned.ID())
 	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(owned, nil)
-	suite.mockUrls.EXPECT().Update(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, u url.URL) (url.URL, error) { return u, nil })
+	suite.mockUrls.EXPECT().SoftDelete(gomock.Any(), id).Return(nil)
 
 	status, _, _ := suite.do("DELETE", baseURI+"/urls/"+id, "")
 

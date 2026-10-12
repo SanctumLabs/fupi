@@ -236,7 +236,7 @@ COMMENT ON COLUMN webhooks.deleted_at IS 'Timestamp when the webhook was deleted
 -- Security scan results (Security context)
 CREATE TABLE IF NOT EXISTS url_scans (
     id           UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
-    url_id       UUID  NOT NULL REFERENCES urls(id),
+    url_id       UUID  NOT NULL REFERENCES urls(id) ON DELETE CASCADE,
     provider     VARCHAR(50)  NOT NULL, -- 'google_safe_browsing' | 'virustotal'
     result       VARCHAR(20)  NOT NULL, -- 'safe' | 'malware' | 'phishing' | 'unknown'
     raw_response JSONB,

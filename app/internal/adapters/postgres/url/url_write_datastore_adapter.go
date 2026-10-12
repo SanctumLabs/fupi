@@ -203,12 +203,82 @@ func mapUrl(ctx context.Context, handlerLogPrefix string, urlModel postgresql.Ur
 	return mappedUrl, nil
 }
 
-// SoftDelete is not implemented yet.
+// SoftDelete marks the url DELETED through the aggregate, so the status, deleted_at (which releases the target for
+// re-shortening) and URLDeleted commit together. The row is locked while it is decided, so of two concurrent deletes
+// one succeeds and the other is a Conflict. An unknown id is NotFound.
 func (repo *urlWriteDatastoreAdapter) SoftDelete(ctx context.Context, id string) error {
-	return errdefs.NotImplemented(errors.New("url soft delete is not implemented"))
+	handlerLogPrefix := fmt.Sprintf("%s<SoftDelete>", repo.logPrefix)
+	slog.InfoContext(ctx, fmt.Sprintf("%s Soft deleting URL", handlerLogPrefix), "url_id", id)
+
+	_, err := postgresrepo.Execute(ctx, repo.config, fmt.Sprintf("%s.SoftDelete", repo.logPrefix), repo.withTx, func(retryCtx context.Context, qtx postgresrepo.UrlWriteQuerier) (url.URL, error) {
+		locked, urlID, lockErr := lockUrl(retryCtx, handlerLogPrefix, qtx, id)
+		if lockErr != nil {
+			return url.URL{}, lockErr
+		}
+
+		if deleteErr := locked.MarkDeleted(); deleteErr != nil {
+			return url.URL{}, errdefs.Conflict(deleteErr)
+		}
+
+		if _, updateErr := qtx.QueryUpdateUrl(retryCtx, postgresql.QueryUpdateUrlParams{
+			ID:        urlID,
+			Status:    postgresql.UrlStatus(locked.Status()),
+			ExpiresOn: pgtype.Timestamptz{Time: locked.ExpiresOn(), Valid: !locked.ExpiresOn().IsZero()},
+		}); updateErr != nil {
+			slog.ErrorContext(retryCtx, fmt.Sprintf("%s Failed to soft delete URL", handlerLogPrefix), "url_id", id, "error", updateErr)
+			return url.URL{}, fmt.Errorf("failed to soft delete URL %s: %w", id, updateErr)
+		}
+
+		return url.URL{}, writeEvents(retryCtx, qtx, locked)
+	})
+	return err
 }
 
-// Delete is not implemented yet.
+// Delete removes the url for good, with its keywords and scan results (ON DELETE CASCADE), and records URLPurged in the
+// same transaction so consumers drop what they hold for it. It works whatever the url's status. An unknown id is
+// NotFound.
 func (repo *urlWriteDatastoreAdapter) Delete(ctx context.Context, id string) error {
-	return errdefs.NotImplemented(errors.New("url delete is not implemented"))
+	handlerLogPrefix := fmt.Sprintf("%s<Delete>", repo.logPrefix)
+	slog.InfoContext(ctx, fmt.Sprintf("%s Purging URL", handlerLogPrefix), "url_id", id)
+
+	_, err := postgresrepo.Execute(ctx, repo.config, fmt.Sprintf("%s.Delete", repo.logPrefix), repo.withTx, func(retryCtx context.Context, qtx postgresrepo.UrlWriteQuerier) (url.URL, error) {
+		locked, urlID, lockErr := lockUrl(retryCtx, handlerLogPrefix, qtx, id)
+		if lockErr != nil {
+			return url.URL{}, lockErr
+		}
+
+		locked.Purge()
+
+		if _, deleteErr := qtx.QueryDeleteUrlWithId(retryCtx, urlID); deleteErr != nil {
+			slog.ErrorContext(retryCtx, fmt.Sprintf("%s Failed to purge URL", handlerLogPrefix), "url_id", id, "error", deleteErr)
+			return url.URL{}, fmt.Errorf("failed to purge URL %s: %w", id, deleteErr)
+		}
+
+		return url.URL{}, writeEvents(retryCtx, qtx, locked)
+	})
+	return err
+}
+
+// lockUrl loads the url with the given id and locks its row for the rest of the transaction. The aggregate is mapped
+// without its keywords: the callers decide its status and must not write keywords back.
+func lockUrl(ctx context.Context, handlerLogPrefix string, qtx postgresrepo.UrlWriteQuerier, id string) (url.URL, pgtype.UUID, error) {
+	urlID, idErr := postgres.StringToUUID(id)
+	if idErr != nil {
+		return url.URL{}, pgtype.UUID{}, errdefs.NotFound(fmt.Errorf("url %q: %w", id, idErr))
+	}
+
+	urlModel, queryErr := qtx.QueryUrlByIdForUpdate(ctx, urlID)
+	if queryErr != nil {
+		if errors.Is(queryErr, pgx.ErrNoRows) {
+			return url.URL{}, pgtype.UUID{}, errdefs.NotFound(fmt.Errorf("url %s: %w", id, queryErr))
+		}
+		slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to lock URL", handlerLogPrefix), "url_id", id, "error", queryErr)
+		return url.URL{}, pgtype.UUID{}, fmt.Errorf("failed to lock URL %s: %w", id, queryErr)
+	}
+
+	locked, mapErr := mapUrl(ctx, handlerLogPrefix, urlModel, nil)
+	if mapErr != nil {
+		return url.URL{}, pgtype.UUID{}, mapErr
+	}
+	return locked, urlID, nil
 }
