@@ -75,6 +75,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) newMockUrlRow(options ...urlmock.
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchById_Success() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	mockUrl, urlRecord := suite.newMockUrlRow()
 
@@ -112,6 +113,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchById_InvalidId() {
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByShortCode_Success() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	mockUrl, urlRecord := suite.newMockUrlRow(urlmock.WithShortCode("abc1234"))
 
@@ -140,6 +142,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByShortCode_NotFound() {
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByCustomAlias_Success() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	mockUrl, urlRecord := suite.newMockUrlRow(urlmock.WithCustomAlias("alias"))
 
@@ -168,6 +171,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByCustomAlias_NotFound()
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByOriginalUrl_Success() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	mockUrl, urlRecord := suite.newMockUrlRow(urlmock.WithOriginalUrl("https://example.com/target"))
 
@@ -196,6 +200,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByOriginalUrl_NotFound()
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchAll_Success() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	first, firstRecord := suite.newMockUrlRow()
 	second, secondRecord := suite.newMockUrlRow()
@@ -237,6 +242,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchAll_QueryError() {
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByStatus_FiltersByStatus() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	mockUrl, urlRecord := suite.newMockUrlRow()
 	urlRecord.Status = postgresql.UrlStatusEXPIRED
@@ -271,6 +277,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByStatus_Empty() {
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_FiltersByUser() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	userId := entity.NewID()
 	mockUrl, urlRecord := suite.newMockUrlRow(urlmock.WithUserId(userId.String()))
@@ -311,6 +318,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_QueryError() {
 }
 
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchExpiredActive_ReturnsRows() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	before := time.Now()
 	first, firstRecord := suite.newMockUrlRow()
@@ -361,6 +369,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchExpiredActive_QueryError
 // TestFetchByOriginalUrl_NormalizesLookup matters because original_url is stored canonically: a
 // caller passing a trailing slash, an uppercase host or a utm parameter must still find the row.
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByOriginalUrl_NormalizesLookup() {
+	suite.expectKeywords()
 	ctx := context.Background()
 	mockUrl, urlRecord := suite.newMockUrlRow(urlmock.WithOriginalUrl("https://example.com/target"))
 
@@ -379,4 +388,68 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByOriginalUrl_Normalizes
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByOriginalUrl_RejectsMalformedUrl() {
 	_, err := suite.urlReadDatastoreAdapter.FetchByOriginalUrl(context.Background(), "nope")
 	suite.Error(err)
+}
+
+// expectKeywords expects the one keywords lookup every successful read makes, answering it with rows.
+func (suite *UrlReadDatastoreAdapterTestSuite) expectKeywords(rows ...postgresql.QueryActiveKeywordsByUrlIdsRow) {
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryActiveKeywordsByUrlIds(gomock.Any(), gomock.Any()).
+		Return(rows, nil).
+		Times(1)
+}
+
+// TestFetchAll_AttachesEachUrlsKeywords asserts the keywords loaded in one query end up on the URL they belong to.
+func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchAll_AttachesEachUrlsKeywords() {
+	first, firstRecord := suite.newMockUrlRow()
+	second, secondRecord := suite.newMockUrlRow()
+
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryAllUrls(gomock.Any(), gomock.Any()).
+		Return([]postgresql.QueryAllUrlsRow{{Url: firstRecord, TotalRecords: 2}, {Url: secondRecord, TotalRecords: 2}}, nil).
+		Times(1)
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryActiveKeywordsByUrlIds(gomock.Any(), []pgtype.UUID{firstRecord.ID, secondRecord.ID}).
+		Return([]postgresql.QueryActiveKeywordsByUrlIdsRow{
+			{Keyword: postgresql.Keyword{UrlID: secondRecord.ID, Value: "news"}},
+			{Keyword: postgresql.Keyword{UrlID: firstRecord.ID, Value: "docs"}},
+			{Keyword: postgresql.Keyword{UrlID: secondRecord.ID, Value: "tech"}},
+		}, nil).
+		Times(1)
+
+	actual, err := suite.urlReadDatastoreAdapter.FetchAll(context.Background(), common.NewRequestParams())
+	suite.Require().NoError(err)
+	suite.Require().Len(actual.Records, 2)
+
+	keywordValues := func(u domainurl.URL) []string {
+		values := []string{}
+		for _, kw := range u.Keywords() {
+			values = append(values, kw.Value)
+		}
+		return values
+	}
+	suite.Equal(first.ID(), actual.Records[0].ID())
+	suite.Equal([]string{"docs"}, keywordValues(actual.Records[0]))
+	suite.Equal(second.ID(), actual.Records[1].ID())
+	suite.Equal([]string{"news", "tech"}, keywordValues(actual.Records[1]))
+}
+
+func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchById_KeywordsQueryError() {
+	mockUrl, urlRecord := suite.newMockUrlRow()
+
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryUrlById(gomock.Any(), gomock.Any()).
+		Return(postgresql.QueryUrlByIdRow{Url: urlRecord}, nil).
+		Times(1)
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryActiveKeywordsByUrlIds(gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("connection reset")).
+		AnyTimes()
+
+	_, err := suite.urlReadDatastoreAdapter.FetchById(context.Background(), mockUrl.ID().String())
+	suite.ErrorContains(err, "connection reset")
 }

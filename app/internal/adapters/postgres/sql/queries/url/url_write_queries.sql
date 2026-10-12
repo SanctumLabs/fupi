@@ -36,3 +36,20 @@ WHERE id = $1 RETURNING *;
 
 -- name: QueryDeleteUrlWithId :one
 DELETE FROM urls WHERE id = $1 RETURNING *;
+
+-- Persists the state the URL aggregate owns after a transition. deleted_at follows the status, so
+-- the DELETED transition releases the target for reuse (idx_urls_original_url is partial on
+-- deleted_at IS NULL) and no other status can leave a stale deleted_at behind.
+-- name: QueryUpdateUrl :one
+UPDATE urls
+SET
+  status = sqlc.arg(status)::url_status,
+  expires_on = sqlc.arg(expires_on),
+  deleted_at = CASE WHEN sqlc.arg(status)::url_status = 'DELETED' THEN COALESCE(deleted_at, NOW()) END,
+  updated_at = NOW()
+WHERE id = sqlc.arg(id) RETURNING *;
+
+-- Claims the next block of short code counter values. short_code_counter increments by the block
+-- size, so the caller owns [value, value + block size).
+-- name: QueryNextShortCodeBlock :one
+SELECT nextval('short_code_counter')::bigint AS block_start;

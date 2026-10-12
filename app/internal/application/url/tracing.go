@@ -11,7 +11,7 @@ import (
 
 const instrumentationName = "github.com/sanctumlabs/fupi/app/internal/application/url"
 
-// startUseCase starts the span of one use case, named identity.<useCase>, as a child of the request's span.
+// startUseCase starts the span of one use case, named url.<useCase>, as a child of the request's span.
 func (svc *Service) startUseCase(ctx context.Context, useCase string) (context.Context, trace.Span) {
 	return svc.tracer.Start(ctx, "url."+useCase)
 }

@@ -1,46 +1,48 @@
-//go:build legacy
-
-package url
+// Package urlapi exposes the URL bounded context over HTTP: the authenticated management of a user's short urls and
+// the public redirect.
+package urlapi
 
 import (
 	"fmt"
+	"regexp"
 
-	"github.com/sanctumlabs/fupi/app/internal/core/contracts"
-	"github.com/sanctumlabs/fupi/app/server/router"
+	urlapp "github.com/sanctumlabs/fupi/app/internal/application/url"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
 )
 
-// urlRouter is a router for the url API.
+// RedirectPathPattern matches the paths the public redirect serves: one segment shaped like a short code (6-10 base62
+// characters) or a custom alias (3-12 alphanumerics and dashes). The auth middleware exempts exactly these paths.
+var RedirectPathPattern = regexp.MustCompile(`^/[a-zA-Z0-9-]{3,12}$`)
+
 type urlRouter struct {
-	urlSvc      contracts.UrlService
-	urlReadSvc  contracts.UrlReadService
-	urlWriteSvc contracts.UrlWriteService
-	routes      []router.Route
-	baseUri     string
+	svc          *urlapp.Service
+	routes       []router.Route
+	baseUri      string
+	shortBaseURL string
 }
 
-// NewUrlRouter initializes a new router
-func NewUrlRouter(baseUri string, urlSvc contracts.UrlService, urlReadSvc contracts.UrlReadService, urlWriteSvc contracts.UrlWriteService) router.Router {
-	r := &urlRouter{
-		urlSvc:      urlSvc,
-		urlReadSvc:  urlReadSvc,
-		urlWriteSvc: urlWriteSvc,
-		baseUri:     baseUri,
-	}
-	r.initRoutes()
-	return r
+// NewRouter creates the URL HTTP routes: management under baseUri and the redirect at the root. shortBaseURL is the
+// externally visible address short urls are built on.
+//
+// Register it after every other router: the redirect matches any single-segment path, and Fiber serves the first route
+// that matches.
+func NewRouter(baseUri, shortBaseURL string, svc *urlapp.Service) router.Router {
+	rtr := &urlRouter{svc: svc, baseUri: baseUri, shortBaseURL: shortBaseURL}
+	rtr.initRoutes()
+	return rtr
 }
 
-// Routes returns the available routes to the controller
-func (route *urlRouter) Routes() []router.Route {
-	return route.routes
+func (rtr *urlRouter) Routes() []router.Route {
+	return rtr.routes
 }
 
-func (route *urlRouter) initRoutes() {
-	route.routes = []router.Route{
-		router.NewPostRoute(fmt.Sprintf("%s/urls", route.baseUri), route.createShortUrl),
-		router.NewGetRoute(fmt.Sprintf("%s/urls", route.baseUri), route.getAllUrls),
-		router.NewGetRoute(fmt.Sprintf("%s/urls/:id", route.baseUri), route.getUrlById),
-		router.NewDeleteRoute(fmt.Sprintf("%s/urls/:id", route.baseUri), route.deleteUrl),
-		router.NewPatchRoute(fmt.Sprintf("%s/urls/:id", route.baseUri), route.updateUrl),
+func (rtr *urlRouter) initRoutes() {
+	rtr.routes = []router.Route{
+		router.NewPostRoute(fmt.Sprintf("%s/urls", rtr.baseUri), rtr.create),
+		router.NewGetRoute(fmt.Sprintf("%s/urls", rtr.baseUri), rtr.list),
+		router.NewGetRoute(fmt.Sprintf("%s/urls/:id", rtr.baseUri), rtr.get),
+		router.NewPatchRoute(fmt.Sprintf("%s/urls/:id", rtr.baseUri), rtr.update),
+		router.NewDeleteRoute(fmt.Sprintf("%s/urls/:id", rtr.baseUri), rtr.delete),
+		router.NewGetRoute("/:code", rtr.redirect),
 	}
 }

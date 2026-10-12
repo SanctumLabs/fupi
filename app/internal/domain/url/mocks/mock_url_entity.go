@@ -196,3 +196,15 @@ func WithExpiresOn(expiresOn time.Time) MockUrlOption {
 		r.ExpiresOn = expiresOn
 	}
 }
+
+func WithKeywords(keywords []string) MockUrlOption {
+	return func(r *url.URLParams) {
+		r.Keywords = keywords
+	}
+}
+
+func WithStatus(status url.URLStatus) MockUrlOption {
+	return func(r *url.URLParams) {
+		r.Status = status
+	}
+}

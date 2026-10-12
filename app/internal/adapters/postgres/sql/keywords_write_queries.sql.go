@@ -66,6 +66,18 @@ func (q *Queries) QueryDeleteKeywordWithId(ctx context.Context, id pgtype.UUID) 
 	return i, err
 }
 
+const queryDeleteKeywordsByUrlId = `-- name: QueryDeleteKeywordsByUrlId :exec
+DELETE FROM keywords WHERE url_id = $1
+`
+
+// QueryDeleteKeywordsByUrlId
+//
+//	DELETE FROM keywords WHERE url_id = $1
+func (q *Queries) QueryDeleteKeywordsByUrlId(ctx context.Context, urlID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, queryDeleteKeywordsByUrlId, urlID)
+	return err
+}
+
 const querySoftDeleteKeyword = `-- name: QuerySoftDeleteKeyword :one
 UPDATE keywords
 SET

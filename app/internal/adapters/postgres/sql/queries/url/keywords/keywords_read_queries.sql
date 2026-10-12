@@ -94,3 +94,11 @@ ORDER BY
     THEN kw.deleted_at END DESC
 LIMIT sqlc.arg(limit_by)
 OFFSET sqlc.arg(current_offset);
+
+-- name: QueryActiveKeywordsByUrlIds :many
+SELECT
+  sqlc.embed(kw)
+FROM keywords kw
+WHERE kw.url_id = ANY(sqlc.arg(url_ids)::uuid[])
+  AND kw.deleted_at IS NULL
+ORDER BY kw.created_at ASC, kw.id ASC;

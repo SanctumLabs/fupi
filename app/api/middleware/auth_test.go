@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http/httptest"
+	"regexp"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -148,4 +149,18 @@ func TestAuthMiddleware_DoesNotExemptArbitrarySingleSegmentPaths(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode,
 		"an undeclared single-segment path must still require a token")
+}
+
+func TestAuthMiddleware_ExemptsPathsMatchingAPublicPattern(t *testing.T) {
+	config := testConfig()
+	config.PublicPatterns = []*regexp.Regexp{regexp.MustCompile(`^/[a-z0-9]{6}$`)}
+	app := newTestApp(config)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/abc123", nil))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	resp, err = app.Test(httptest.NewRequest("GET", "/protected", nil))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode, "a path the pattern does not match still requires a token")
 }
