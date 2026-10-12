@@ -10,6 +10,7 @@ import (
 	"github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
 	"github.com/sanctumlabs/fupi/app/internal/domain/url"
 	urlmock "github.com/sanctumlabs/fupi/app/internal/domain/url/mocks"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
 	mockports "github.com/sanctumlabs/fupi/app/internal/ports/mocks"
 	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"github.com/stretchr/testify/suite"
@@ -235,12 +236,24 @@ func (suite *UrlServiceTestSuite) TestGet_MalformedIdIsNotFoundWithoutAQuery() {
 
 func (suite *UrlServiceTestSuite) TestList_ReturnsTheCallersUrls() {
 	page := repository.FetchRecordsResponse[url.URL]{Records: []url.URL{suite.ownedUrl()}, Total: 1, Page: 1, Size: 1}
-	suite.mockUrls.EXPECT().FetchByUserId(gomock.Any(), suite.userID).Return(page, nil)
+	params := common.NewRequestParams(common.WithRequestLimit(10), common.WithOffset(20), common.WithStatus("ACTIVE"))
+	suite.mockUrls.EXPECT().FetchByUserId(gomock.Any(), suite.userID, params).Return(page, nil)
 
-	actual, err := suite.service.List(context.Background(), suite.userID)
+	actual, err := suite.service.List(context.Background(), suite.userID, params)
 
 	suite.Require().NoError(err)
 	suite.Equal(page, actual)
+}
+
+func (suite *UrlServiceTestSuite) TestList_NeverIncludesDeleted() {
+	asked := common.NewRequestParams(common.WithIncludeDeleted(true))
+	suite.mockUrls.EXPECT().
+		FetchByUserId(gomock.Any(), suite.userID, common.NewRequestParams(common.WithIncludeDeleted(false))).
+		Return(repository.FetchRecordsResponse[url.URL]{}, nil)
+
+	_, err := suite.service.List(context.Background(), suite.userID, asked)
+
+	suite.Require().NoError(err)
 }
 
 // --- Update -----------------------------------------------------------------------------------
