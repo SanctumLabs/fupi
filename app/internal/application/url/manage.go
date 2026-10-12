@@ -71,6 +71,8 @@ func (svc *Service) Update(ctx context.Context, cmd UpdateCommand) (_ url.URL, e
 		return url.URL{}, updateErr
 	}
 
+	svc.evictRedirects(ctx, &updated)
+
 	slog.InfoContext(ctx, fmt.Sprintf("%s Updated url", handlerLogPrefix), "url_id", cmd.ID)
 
 	return updated, nil
@@ -86,7 +88,8 @@ func (svc *Service) Delete(ctx context.Context, userID, id string) (err error) {
 
 	// fetchOwned is the ownership check; SoftDelete then re-reads the url under a row lock and applies the transition,
 	// so a delete racing this one is a Conflict rather than a second URLDeleted.
-	if _, fetchErr := svc.fetchOwned(ctx, userID, id); fetchErr != nil {
+	owned, fetchErr := svc.fetchOwned(ctx, userID, id)
+	if fetchErr != nil {
 		return fetchErr
 	}
 
@@ -94,6 +97,8 @@ func (svc *Service) Delete(ctx context.Context, userID, id string) (err error) {
 		slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to delete url", handlerLogPrefix), "url_id", id, "error", deleteErr)
 		return deleteErr
 	}
+
+	svc.evictRedirects(ctx, &owned)
 
 	slog.InfoContext(ctx, fmt.Sprintf("%s Deleted url", handlerLogPrefix), "url_id", id)
 

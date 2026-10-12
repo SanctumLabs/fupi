@@ -118,6 +118,21 @@ func (mr *MockUrlDatastoreMockRecorder) FetchByOriginalUrl(ctx, originalUrl any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByOriginalUrl", reflect.TypeOf((*MockUrlDatastore)(nil).FetchByOriginalUrl), ctx, originalUrl)
 }
 
+// FetchRedirectTarget mocks base method.
+func (m *MockUrlDatastore) FetchRedirectTarget(ctx context.Context, code string) (url.RedirectTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchRedirectTarget", ctx, code)
+	ret0, _ := ret[0].(url.RedirectTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchRedirectTarget indicates an expected call of FetchRedirectTarget.
+func (mr *MockUrlDatastoreMockRecorder) FetchRedirectTarget(ctx, code any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchRedirectTarget", reflect.TypeOf((*MockUrlDatastore)(nil).FetchRedirectTarget), ctx, code)
+}
+
 // FetchByShortCode mocks base method.
 func (m *MockUrlDatastore) FetchByShortCode(ctx context.Context, shortCode string) (url.URL, error) {
 	m.ctrl.T.Helper()
@@ -386,6 +401,21 @@ func (m *MockUrlReadDatastore) FetchByOriginalUrl(ctx context.Context, originalU
 func (mr *MockUrlReadDatastoreMockRecorder) FetchByOriginalUrl(ctx, originalUrl any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByOriginalUrl", reflect.TypeOf((*MockUrlReadDatastore)(nil).FetchByOriginalUrl), ctx, originalUrl)
+}
+
+// FetchRedirectTarget mocks base method.
+func (m *MockUrlReadDatastore) FetchRedirectTarget(ctx context.Context, code string) (url.RedirectTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchRedirectTarget", ctx, code)
+	ret0, _ := ret[0].(url.RedirectTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchRedirectTarget indicates an expected call of FetchRedirectTarget.
+func (mr *MockUrlReadDatastoreMockRecorder) FetchRedirectTarget(ctx, code any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchRedirectTarget", reflect.TypeOf((*MockUrlReadDatastore)(nil).FetchRedirectTarget), ctx, code)
 }
 
 // FetchByShortCode mocks base method.

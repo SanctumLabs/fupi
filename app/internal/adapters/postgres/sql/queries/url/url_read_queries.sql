@@ -120,3 +120,11 @@ WHERE u.original_url = $1
   AND u.deleted_at IS NULL
 ORDER BY u.created_at ASC
 LIMIT 1;
+
+-- name: QueryRedirectTargetByCode :one
+SELECT
+  u.original_url, u.status, u.expires_on
+FROM urls u
+WHERE u.short_code = $1 OR u.custom_alias = $1
+ORDER BY (u.short_code = $1) DESC
+LIMIT 1;

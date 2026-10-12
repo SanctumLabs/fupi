@@ -121,6 +121,21 @@ func (repo *urlReadDatastoreAdapter) FetchByShortCode(ctx context.Context, short
 		})
 }
 
+// FetchRedirectTarget is the redirect's read: one query for the short code or the alias, and no keywords.
+func (repo *urlReadDatastoreAdapter) FetchRedirectTarget(ctx context.Context, code string) (url.RedirectTarget, error) {
+	return postgresrepo.Execute(ctx, repo.config, fmt.Sprintf("%s.FetchRedirectTarget", repo.logPrefix), repo.withTx,
+		func(ctx context.Context, qtx postgresrepo.UrlReadQuerier) (url.RedirectTarget, error) {
+			row, queryErr := qtx.QueryRedirectTargetByCode(ctx, code)
+			if errors.Is(queryErr, pgx.ErrNoRows) {
+				return url.RedirectTarget{}, errdefs.NotFound(queryErr)
+			}
+			if queryErr != nil {
+				return url.RedirectTarget{}, fmt.Errorf("failed to retrieve redirect target: %w", queryErr)
+			}
+			return url.NewRedirectTarget(row.OriginalUrl, url.URLStatus(row.Status), row.ExpiresOn.Time)
+		})
+}
+
 func (repo *urlReadDatastoreAdapter) FetchByCustomAlias(ctx context.Context, customAlias string) (url.URL, error) {
 	slog.InfoContext(ctx, fmt.Sprintf("%s<FetchByCustomAlias> Fetching URL by custom alias", repo.logPrefix), "custom_alias", customAlias)
 

@@ -368,6 +368,36 @@ func (q *Queries) QueryExpiredActiveUrls(ctx context.Context, arg QueryExpiredAc
 	return items, nil
 }
 
+const queryRedirectTargetByCode = `-- name: QueryRedirectTargetByCode :one
+SELECT
+  u.original_url, u.status, u.expires_on
+FROM urls u
+WHERE u.short_code = $1 OR u.custom_alias = $1
+ORDER BY (u.short_code = $1) DESC
+LIMIT 1
+`
+
+type QueryRedirectTargetByCodeRow struct {
+	OriginalUrl string             `db:"original_url" json:"original_url"`
+	Status      UrlStatus          `db:"status" json:"status"`
+	ExpiresOn   pgtype.Timestamptz `db:"expires_on" json:"expires_on"`
+}
+
+// QueryRedirectTargetByCode
+//
+//	SELECT
+//	  u.original_url, u.status, u.expires_on
+//	FROM urls u
+//	WHERE u.short_code = $1 OR u.custom_alias = $1
+//	ORDER BY (u.short_code = $1) DESC
+//	LIMIT 1
+func (q *Queries) QueryRedirectTargetByCode(ctx context.Context, shortCode string) (QueryRedirectTargetByCodeRow, error) {
+	row := q.db.QueryRow(ctx, queryRedirectTargetByCode, shortCode)
+	var i QueryRedirectTargetByCodeRow
+	err := row.Scan(&i.OriginalUrl, &i.Status, &i.ExpiresOn)
+	return i, err
+}
+
 const queryUrlByCustomAlias = `-- name: QueryUrlByCustomAlias :one
 SELECT
   u.id, u.user_id, u.short_code, u.custom_alias, u.original_url, u.status, u.expires_on, u.og_title, u.og_description, u.og_image_url, u.metadata, u.created_at, u.updated_at, u.deleted_at
