@@ -11,6 +11,7 @@ import (
 type Service struct {
 	urls               url.UrlDatastore
 	shortCodeGenerator ports.ShortCodeGenerator
+	access             *AccessRecorder
 	tracer             trace.Tracer
 	logPrefix          string
 }
@@ -24,3 +25,12 @@ func NewService(urls url.UrlDatastore, shortCodeGenerator ports.ShortCodeGenerat
 		logPrefix:          "UrlService",
 	}
 }
+
+// WithAccessRecorder makes redirects report URLAccessed through recorder; without one they report nothing.
+func (svc *Service) WithAccessRecorder(recorder *AccessRecorder) *Service {
+	svc.access = recorder
+	return svc
+}
+
+// RecordAccess reports a visit to a short url. It never blocks and never fails the redirect.
+func (svc *Service) RecordAccess(access Access) { svc.access.Record(access) }

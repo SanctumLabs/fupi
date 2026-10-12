@@ -21,7 +21,9 @@ import (
 	identityapi "github.com/sanctumlabs/fupi/app/api/v1/identity"
 	urlapi "github.com/sanctumlabs/fupi/app/api/v1/url"
 	"github.com/sanctumlabs/fupi/app/config"
+	"github.com/sanctumlabs/fupi/app/internal/adapters/geolocation"
 	"github.com/sanctumlabs/fupi/app/internal/adapters/jwtauth"
+	kafkaadapter "github.com/sanctumlabs/fupi/app/internal/adapters/kafka"
 	"github.com/sanctumlabs/fupi/app/internal/adapters/notifications"
 	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
 	identitydatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/identity"
@@ -33,6 +35,7 @@ import (
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/monitoring/health"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/queue/kafka"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/server"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/telemetry"
@@ -45,6 +48,11 @@ const (
 
 	// redisStartupPingTimeout bounds the one ping that only decides which startup line is logged.
 	redisStartupPingTimeout = 2 * time.Second
+
+	// urlAccessedTopic is where redirects publish URLAccessed; urlAccessedBuffer is how many visits may wait for the
+	// publisher before new ones are dropped.
+	urlAccessedTopic  = "url.accessed"
+	urlAccessedBuffer = 1024
 )
 
 // healthcheckTimeout bounds the container health probe. It is a variable so a test can shorten it.
@@ -192,10 +200,24 @@ func run(ctx context.Context, cfg config.App) error {
 		notifier,
 	)
 
+	// Best-effort analytics (ADR-0021): the producer connects lazily, so an unreachable Kafka never stops startup.
+	producer, err := kafka.NewProducer(kafka.Config{
+		Brokers:        cfg.Kafka.Brokers,
+		ClientID:       cfg.Kafka.ClientID,
+		PublishTimeout: cfg.Kafka.PublishTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("create the kafka producer: %w", err)
+	}
+	publisher := kafkaadapter.NewEventPublisher(producer)
+	defer publisher.Close()
+	accessRecorder := urlapp.NewAccessRecorder(geolocation.Unknown{}, publisher, urlAccessedTopic, urlAccessedBuffer)
+	defer accessRecorder.Close()
+
 	urlService := urlapp.NewService(
 		urldatastore.NewUrlDatastoreAdapter(dbClient, dbConfig),
 		postgresrepo.NewSequenceShortCodeGenerator(dbClient, []byte(cfg.ShortCode.Key)),
-	)
+	).WithAccessRecorder(accessRecorder)
 
 	srv := server.NewServer(server.ServerConfig{
 		Header:      cfg.Server.Header,

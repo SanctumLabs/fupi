@@ -55,6 +55,7 @@ type App struct {
 	Server          ServerSettings
 	Database        DatabaseSettings
 	Redis           redis.RedisClientConfig
+	Kafka           KafkaSettings
 	Auth            AuthConfig
 	ShortCode       ShortCodeSettings
 	Logging         LoggingSettings
@@ -81,6 +82,8 @@ func Load(lookup Lookup) (App, error) {
 	app.Database, err = LoadDatabase(lookup)
 	errs = append(errs, err)
 	app.Redis, err = LoadRedis(lookup)
+	errs = append(errs, err)
+	app.Kafka, err = LoadKafka(lookup)
 	errs = append(errs, err)
 	app.Auth, err = LoadAuth(lookup)
 	errs = append(errs, err)
