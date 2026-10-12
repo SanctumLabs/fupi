@@ -26,6 +26,7 @@ import (
 	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
 	identitydatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/identity"
 	urldatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/url"
+	redisadapter "github.com/sanctumlabs/fupi/app/internal/adapters/redis"
 	identityapp "github.com/sanctumlabs/fupi/app/internal/application/identity"
 	urlapp "github.com/sanctumlabs/fupi/app/internal/application/url"
 	"github.com/sanctumlabs/fupi/app/pkg"
@@ -195,6 +196,7 @@ func run(ctx context.Context, cfg config.App) error {
 	urlService := urlapp.NewService(
 		urldatastore.NewUrlDatastoreAdapter(dbClient, dbConfig),
 		postgresrepo.NewSequenceShortCodeGenerator(dbClient, []byte(cfg.ShortCode.Key)),
+		urlapp.WithRedirectCache(redisadapter.NewRedirectCache(cache), cfg.RedirectCache.TTL, cfg.RedirectCache.AbsentTTL),
 	)
 
 	srv := server.NewServer(server.ServerConfig{

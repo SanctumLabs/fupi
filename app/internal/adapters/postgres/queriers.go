@@ -27,6 +27,7 @@ type (
 	UrlReadQuerier interface {
 		QueryUrlById(ctx context.Context, id pgtype.UUID) (postgresql.QueryUrlByIdRow, error)
 		QueryUrlByUrlShortCode(ctx context.Context, shortCode string) (postgresql.QueryUrlByUrlShortCodeRow, error)
+		QueryRedirectTargetByCode(ctx context.Context, shortCode string) (postgresql.QueryRedirectTargetByCodeRow, error)
 		QueryUrlByCustomAlias(ctx context.Context, customAlias pgtype.Text) (postgresql.QueryUrlByCustomAliasRow, error)
 		QueryUrlByOriginalUrl(ctx context.Context, originalUrl string) (postgresql.QueryUrlByOriginalUrlRow, error)
 		QueryAllUrls(ctx context.Context, arg postgresql.QueryAllUrlsParams) ([]postgresql.QueryAllUrlsRow, error)

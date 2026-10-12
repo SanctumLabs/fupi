@@ -28,6 +28,10 @@ type (
 		// FetchByShortCode retrieves a URL entity by its short code
 		FetchByShortCode(ctx context.Context, shortCode string) (URL, error)
 
+		// FetchRedirectTarget retrieves what the redirect needs for a short code or, failing that, a custom alias,
+		// without the url's keywords. A short code wins over an alias of the same spelling.
+		FetchRedirectTarget(ctx context.Context, code string) (RedirectTarget, error)
+
 		// FetchByCustomAlias retrieves a URL entity by its custom alias
 		FetchByCustomAlias(ctx context.Context, customAlias string) (URL, error)
 

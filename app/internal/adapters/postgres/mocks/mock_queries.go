@@ -275,6 +275,21 @@ func (mr *MockUrlReadQuerierMockRecorder) QueryUrlByOriginalUrl(ctx, originalUrl
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryUrlByOriginalUrl", reflect.TypeOf((*MockUrlReadQuerier)(nil).QueryUrlByOriginalUrl), ctx, originalUrl)
 }
 
+// QueryRedirectTargetByCode mocks base method.
+func (m *MockUrlReadQuerier) QueryRedirectTargetByCode(ctx context.Context, shortCode string) (postgresql.QueryRedirectTargetByCodeRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryRedirectTargetByCode", ctx, shortCode)
+	ret0, _ := ret[0].(postgresql.QueryRedirectTargetByCodeRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryRedirectTargetByCode indicates an expected call of QueryRedirectTargetByCode.
+func (mr *MockUrlReadQuerierMockRecorder) QueryRedirectTargetByCode(ctx, shortCode any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRedirectTargetByCode", reflect.TypeOf((*MockUrlReadQuerier)(nil).QueryRedirectTargetByCode), ctx, shortCode)
+}
+
 // QueryUrlByUrlShortCode mocks base method.
 func (m *MockUrlReadQuerier) QueryUrlByUrlShortCode(ctx context.Context, shortCode string) (postgresql.QueryUrlByUrlShortCodeRow, error) {
 	m.ctrl.T.Helper()

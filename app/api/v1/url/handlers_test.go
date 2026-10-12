@@ -306,8 +306,9 @@ func (suite *UrlHandlersTestSuite) TestDelete_Returns204() {
 // --- GET /:code -------------------------------------------------------------------------------
 
 func (suite *UrlHandlersTestSuite) TestRedirect_Sends302ToTheTarget() {
-	active := suite.ownedUrl(urlmock.WithOriginalUrl("https://example.com/target/page"))
-	suite.mockUrls.EXPECT().FetchByShortCode(gomock.Any(), "000abc").Return(active, nil)
+	active, targetErr := url.NewRedirectTarget("https://example.com/target/page", url.URLStatusActive, time.Now().Add(24*time.Hour))
+	suite.Require().NoError(targetErr)
+	suite.mockUrls.EXPECT().FetchRedirectTarget(gomock.Any(), "000abc").Return(active, nil)
 
 	resp, err := suite.app.Test(httptest.NewRequest("GET", "/000abc", nil))
 
@@ -317,8 +318,7 @@ func (suite *UrlHandlersTestSuite) TestRedirect_Sends302ToTheTarget() {
 }
 
 func (suite *UrlHandlersTestSuite) TestRedirect_UnknownCodeIs404() {
-	suite.mockUrls.EXPECT().FetchByShortCode(gomock.Any(), "nope42").Return(url.URL{}, errdefs.NotFound(errors.New("no rows")))
-	suite.mockUrls.EXPECT().FetchByCustomAlias(gomock.Any(), "nope42").Return(url.URL{}, errdefs.NotFound(errors.New("no rows")))
+	suite.mockUrls.EXPECT().FetchRedirectTarget(gomock.Any(), "nope42").Return(url.RedirectTarget{}, errdefs.NotFound(errors.New("no rows")))
 
 	resp, err := suite.app.Test(httptest.NewRequest("GET", "/nope42", nil))
 

@@ -42,6 +42,16 @@ type ShortCodeSettings struct {
 	Key string
 }
 
+// RedirectCacheSettings configures how long the redirect cache keeps what it learns. Both are bounds on staleness as
+// well as on memory: an entry another writer changed behind the cache's back lives this long at most.
+type RedirectCacheSettings struct {
+	// TTL is how long a url's target is kept; it is cut short at the url's expiry.
+	TTL time.Duration
+	// AbsentTTL is how long a code that does not exist is remembered. It is short so a code created right after a
+	// probe starts redirecting soon even if the creating instance could not evict it.
+	AbsentTTL time.Duration
+}
+
 // LoggingSettings configures the process logger.
 type LoggingSettings struct {
 	Level slog.Level
@@ -57,6 +67,7 @@ type App struct {
 	Redis           redis.RedisClientConfig
 	Auth            AuthConfig
 	ShortCode       ShortCodeSettings
+	RedirectCache   RedirectCacheSettings
 	Logging         LoggingSettings
 	ShutdownTimeout time.Duration
 	// Warnings are problems that do not stop startup but that the operator should see in the log.
@@ -85,6 +96,8 @@ func Load(lookup Lookup) (App, error) {
 	app.Auth, err = LoadAuth(lookup)
 	errs = append(errs, err)
 	app.ShortCode, err = LoadShortCode(lookup)
+	errs = append(errs, err)
+	app.RedirectCache, err = LoadRedirectCache(lookup)
 	errs = append(errs, err)
 	app.Logging, err = LoadLogging(lookup)
 	errs = append(errs, err)
@@ -250,6 +263,22 @@ func LoadRedis(lookup Lookup) (redis.RedisClientConfig, error) {
 		r.fail("REDIS_PASSWORD must be set to a non-default value when ENVIRONMENT is not development or test")
 	}
 
+	return cfg, r.err()
+}
+
+// LoadRedirectCache reads the redirect cache settings, in seconds.
+func LoadRedirectCache(lookup Lookup) (RedirectCacheSettings, error) {
+	r := newReader(lookup)
+	cfg := RedirectCacheSettings{
+		TTL:       r.units("REDIRECT_CACHE_TTL", 300, time.Second),
+		AbsentTTL: r.units("REDIRECT_CACHE_ABSENT_TTL", 30, time.Second),
+	}
+	if cfg.TTL <= 0 {
+		r.fail("REDIRECT_CACHE_TTL must be greater than zero")
+	}
+	if cfg.AbsentTTL <= 0 {
+		r.fail("REDIRECT_CACHE_ABSENT_TTL must be greater than zero")
+	}
 	return cfg, r.err()
 }
 
