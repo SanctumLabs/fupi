@@ -39,6 +39,14 @@ type SecuritySettings struct {
 // ScanningEnabled reports whether a scanner is configured.
 func (s SecuritySettings) ScanningEnabled() bool { return s.SafeBrowsingAPIKey != "" }
 
+// ExpirySettings configures the URL expiry job.
+type ExpirySettings struct {
+	// Interval is the wait between runs.
+	Interval time.Duration
+	// BatchSize is how many URLs one fetch loads.
+	BatchSize int
+}
+
 // HealthSettings is where the worker's health listener binds.
 type HealthSettings struct {
 	Host string
@@ -56,6 +64,7 @@ type Worker struct {
 	Security        SecuritySettings
 	Redis           redis.RedisClientConfig
 	RedirectCache   RedirectCacheSettings
+	Expiry          ExpirySettings
 	Logging         LoggingSettings
 	ShutdownTimeout time.Duration
 	// Warnings are problems that do not stop startup but that the operator should see in the log.
@@ -91,6 +100,8 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 		worker.RedirectCache, err = LoadRedirectCache(lookup)
 		errs = append(errs, err)
 	}
+	worker.Expiry, err = LoadExpiry(lookup)
+	errs = append(errs, err)
 	worker.Logging, err = LoadLogging(lookup)
 	errs = append(errs, err)
 
@@ -168,4 +179,20 @@ func LoadOutbox(lookup Lookup) (OutboxSettings, error) {
 func LoadSecurity(lookup Lookup) (SecuritySettings, error) {
 	r := newReader(lookup)
 	return SecuritySettings{SafeBrowsingAPIKey: r.str("SAFE_BROWSING_API_KEY", "")}, r.err()
+}
+
+// LoadExpiry reads the URL expiry job settings.
+func LoadExpiry(lookup Lookup) (ExpirySettings, error) {
+	r := newReader(lookup)
+	settings := ExpirySettings{
+		Interval:  r.units("EXPIRY_INTERVAL", 60, time.Second),
+		BatchSize: r.integer("EXPIRY_BATCH_SIZE", 100),
+	}
+	if settings.Interval < time.Second {
+		r.fail("EXPIRY_INTERVAL must be at least 1 (seconds)")
+	}
+	if settings.BatchSize < 1 || settings.BatchSize > 1000 {
+		r.fail("EXPIRY_BATCH_SIZE must be between 1 and 1000")
+	}
+	return settings, r.err()
 }

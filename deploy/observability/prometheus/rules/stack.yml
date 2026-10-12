@@ -70,3 +70,23 @@ groups:
           severity: warning
         annotations:
           summary: Workers are running but none is the active outbox relay, so nothing is delivered
+
+      # Fed by the URL expiry job in the worker. url_expiry_backlog is the true count of ACTIVE URLs past their expiry at the
+      # end of each run, so it is 0 when the job keeps up and stays above 0 when it falls behind or cannot update rows.
+      # Only the active instance reports these, so both are silent when no worker runs or none holds the lease (the
+      # series are absent).
+      - alert: UrlExpiryBacklog
+        expr: max(url_expiry_backlog{service_name="fupi-worker"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: URLs past their expiry have stayed ACTIVE for 15 minutes; the expiry job is behind or cannot update them
+
+      - alert: UrlExpiryStalled
+        expr: time() - max(url_expiry_last_run_seconds{service_name="fupi-worker"}) > 600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The URL expiry job has not completed a run for more than 10 minutes

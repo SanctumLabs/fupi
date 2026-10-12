@@ -119,7 +119,9 @@ func (repo *urlWriteDatastoreAdapter) Save(ctx context.Context, urlEntity url.UR
 }
 
 // Update persists the state the URL aggregate owns after a change: its status, expiry and keywords, with the events
-// it recorded, in one transaction. The keywords are replaced wholesale, so the entity must carry all of them.
+// it recorded, in one transaction. The keywords are replaced wholesale, so the entity must carry all of them. The
+// update applies only if the row is still as the aggregate was loaded (its updated_at); a writer that worked from a
+// stale copy gets a Conflict instead of overwriting the newer change.
 func (repo *urlWriteDatastoreAdapter) Update(ctx context.Context, urlEntity url.URL) (url.URL, error) {
 	handlerLogPrefix := fmt.Sprintf("%s<Update>", repo.logPrefix)
 	slog.InfoContext(ctx, fmt.Sprintf("%s Updating URL", handlerLogPrefix), "url_id", urlEntity.ID(), "status", urlEntity.Status())
@@ -131,11 +133,23 @@ func (repo *urlWriteDatastoreAdapter) Update(ctx context.Context, urlEntity url.
 			ID:        urlID,
 			Status:    postgresql.UrlStatus(urlEntity.Status()),
 			ExpiresOn: pgtype.Timestamptz{Time: urlEntity.ExpiresOn(), Valid: !urlEntity.ExpiresOn().IsZero()},
+			ExpectedUpdatedAt: pgtype.Timestamptz{
+				Time: urlEntity.LoadedUpdatedAt(), Valid: !urlEntity.LoadedUpdatedAt().IsZero(),
+			},
 		})
 		if updateErr != nil {
 			slog.ErrorContext(retryCtx, fmt.Sprintf("%s Failed to update URL", handlerLogPrefix), "url_id", urlEntity.ID(), "error", updateErr)
 			if errors.Is(updateErr, pgx.ErrNoRows) {
-				return url.URL{}, errdefs.NotFound(updateErr)
+				// No row matched: it is gone, or it changed since this copy was loaded. The row lock tells which.
+				_, lockErr := qtx.QueryUrlByIdForUpdate(retryCtx, urlID)
+				switch {
+				case lockErr == nil:
+					return url.URL{}, errdefs.Conflict(fmt.Errorf("url %s was changed by another writer", urlEntity.ID()))
+				case errors.Is(lockErr, pgx.ErrNoRows):
+					return url.URL{}, errdefs.NotFound(updateErr)
+				default:
+					return url.URL{}, fmt.Errorf("failed to lock URL %s: %w", urlEntity.ID(), lockErr)
+				}
 			}
 			return url.URL{}, fmt.Errorf("failed to update URL %s: %w", urlEntity.ID(), updateErr)
 		}

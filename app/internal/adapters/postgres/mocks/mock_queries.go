@@ -215,6 +215,21 @@ func (mr *MockUrlReadQuerierMockRecorder) QueryAllUrlsByUserId(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryAllUrlsByUserId", reflect.TypeOf((*MockUrlReadQuerier)(nil).QueryAllUrlsByUserId), ctx, arg)
 }
 
+// QueryCountExpiredActiveUrls mocks base method.
+func (m *MockUrlReadQuerier) QueryCountExpiredActiveUrls(ctx context.Context, expiresBefore pgtype.Timestamptz) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryCountExpiredActiveUrls", ctx, expiresBefore)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryCountExpiredActiveUrls indicates an expected call of QueryCountExpiredActiveUrls.
+func (mr *MockUrlReadQuerierMockRecorder) QueryCountExpiredActiveUrls(ctx, expiresBefore any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryCountExpiredActiveUrls", reflect.TypeOf((*MockUrlReadQuerier)(nil).QueryCountExpiredActiveUrls), ctx, expiresBefore)
+}
+
 // QueryExpiredActiveUrls mocks base method.
 func (m *MockUrlReadQuerier) QueryExpiredActiveUrls(ctx context.Context, arg postgresql.QueryExpiredActiveUrlsParams) ([]postgresql.QueryExpiredActiveUrlsRow, error) {
 	m.ctrl.T.Helper()

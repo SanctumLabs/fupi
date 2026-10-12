@@ -46,6 +46,12 @@ type Lease interface {
 	Release()
 }
 
+// Leaser elects one leader among the instances that ask: Acquire takes the lease, or returns ErrNotLeader when another
+// instance holds it. OutboxDatastore is one; the URL expiry job has its own, so the two elect independently.
+type Leaser interface {
+	Acquire(ctx context.Context) (Lease, error)
+}
+
 // OutboxDatastore is what the outbox relay needs from the database.
 type OutboxDatastore interface {
 	// Acquire takes the relay lease, or returns ErrNotLeader when another instance holds it.

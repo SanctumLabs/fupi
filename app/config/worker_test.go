@@ -20,6 +20,7 @@ func TestLoadWorker_DefaultsMatchTheLocalStack(t *testing.T) {
 	assert.Equal(t, OutboxSettings{
 		PollInterval: 100 * time.Millisecond, BatchSize: 100, MaxAttempts: 3, StandbyInterval: 5 * time.Second, Retention: 7 * 24 * time.Hour,
 	}, worker.Outbox)
+	assert.Equal(t, ExpirySettings{Interval: time.Minute, BatchSize: 100}, worker.Expiry)
 	assert.Equal(t, "localhost", worker.Database.Postgres.Host, "the database settings are the API's")
 	assert.Equal(t, "5432", worker.Database.Postgres.Port)
 	assert.Equal(t, "json", worker.Logging.Format)
@@ -31,6 +32,7 @@ func TestLoadWorker_Overrides(t *testing.T) {
 		"KAFKA_BROKERS": "kafka-1:9092, kafka-2:9092,kafka-3:9092", "KAFKA_CLIENT_ID": "relay-1", "KAFKA_PUBLISH_TIMEOUT": "20",
 		"OUTBOX_POLL_INTERVAL_MS": "250", "OUTBOX_BATCH_SIZE": "500", "OUTBOX_MAX_ATTEMPTS": "5",
 		"OUTBOX_STANDBY_INTERVAL": "2", "OUTBOX_RETENTION_DAYS": "30",
+		"EXPIRY_INTERVAL": "10", "EXPIRY_BATCH_SIZE": "500",
 	}))
 	require.NoError(t, err)
 
@@ -42,6 +44,7 @@ func TestLoadWorker_Overrides(t *testing.T) {
 	assert.Equal(t, OutboxSettings{
 		PollInterval: 250 * time.Millisecond, BatchSize: 500, MaxAttempts: 5, StandbyInterval: 2 * time.Second, Retention: 30 * 24 * time.Hour,
 	}, worker.Outbox)
+	assert.Equal(t, ExpirySettings{Interval: 10 * time.Second, BatchSize: 500}, worker.Expiry)
 }
 
 func TestLoadWorker_ARetentionOfZeroTurnsThePurgeOffAndAnEmptyValueCountsAsUnset(t *testing.T) {
@@ -63,6 +66,8 @@ func TestLoadWorker_RejectsValuesOutOfRangeAndNamesTheVariablesNotTheValues(t *t
 		"OUTBOX_MAX_ATTEMPTS":     {"OUTBOX_MAX_ATTEMPTS": "0"},
 		"OUTBOX_STANDBY_INTERVAL": {"OUTBOX_STANDBY_INTERVAL": "0"},
 		"OUTBOX_RETENTION_DAYS":   {"OUTBOX_RETENTION_DAYS": "-1"},
+		"EXPIRY_INTERVAL":         {"EXPIRY_INTERVAL": "0"},
+		"EXPIRY_BATCH_SIZE":       {"EXPIRY_BATCH_SIZE": "5000"},
 		"SHUTDOWN_TIMEOUT":        {"SHUTDOWN_TIMEOUT": "0"},
 	}
 	for variable, env := range cases {
@@ -154,7 +159,7 @@ func TestLoadWorker_EnvExampleDocumentsTheDefaults(t *testing.T) {
 	require.NoError(t, err)
 	for _, key := range []string{
 		"KAFKA_BROKERS", "KAFKA_CLIENT_ID", "KAFKA_PUBLISH_TIMEOUT", "OUTBOX_POLL_INTERVAL_MS", "OUTBOX_BATCH_SIZE",
-		"OUTBOX_MAX_ATTEMPTS", "OUTBOX_STANDBY_INTERVAL", "OUTBOX_RETENTION_DAYS", "WORKER_HTTP_PORT",
+		"OUTBOX_MAX_ATTEMPTS", "OUTBOX_STANDBY_INTERVAL", "OUTBOX_RETENTION_DAYS", "EXPIRY_INTERVAL", "EXPIRY_BATCH_SIZE", "WORKER_HTTP_PORT",
 	} {
 		assert.Contains(t, example, key, "%s is documented in .env.example", key)
 	}

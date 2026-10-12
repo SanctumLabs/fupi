@@ -263,6 +263,34 @@ func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestUpdate_ChangesThe
 	suite.Nil(updated.DeletedAt())
 }
 
+// TestUpdate_AStaleCopyIsAConflictAndDoesNotOverwriteTheNewerChange covers the expiry job racing a user: both load the
+// url, the user suspends it, and the job's copy, which is still ACTIVE, must not turn it back into EXPIRED.
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestUpdate_AStaleCopyIsAConflictAndDoesNotOverwriteTheNewerChange() {
+	ctx, cancel := context.WithTimeout(context.Background(), suite.config.OperationTimeout)
+	defer cancel()
+
+	saved, saveErr := suite.saveUrlForNewUser(ctx)
+	suite.Require().NoError(saveErr)
+	readDatastore := NewUrlReadDatastoreAdapter(suite.testPostgresDatabaseClient, suite.config)
+	forUser, fetchErr := readDatastore.FetchById(ctx, saved.ID().String())
+	suite.Require().NoError(fetchErr)
+	forJob, fetchErr := readDatastore.FetchById(ctx, saved.ID().String())
+	suite.Require().NoError(fetchErr)
+
+	suite.Require().NoError(forUser.Suspend(domainurl.SuspensionReasonSpam))
+	_, userErr := suite.urlWriteDatastoreAdapter.Update(ctx, forUser)
+	suite.Require().NoError(userErr)
+
+	suite.Require().NoError(forJob.MarkExpired())
+	_, jobErr := suite.urlWriteDatastoreAdapter.Update(ctx, forJob)
+	suite.True(errdefs.IsConflict(jobErr), "expected Conflict, got %v", jobErr)
+
+	stored, rereadErr := readDatastore.FetchById(ctx, saved.ID().String())
+	suite.Require().NoError(rereadErr)
+	suite.Equal(domainurl.URLStatusSuspended, stored.Status(), "the newer change stands")
+	suite.Zero(suite.outboxEvents(ctx, saved.ID().String(), "url.expired"), "the lost update wrote no event")
+}
+
 // countRows runs a COUNT(*) query against the test database.
 func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) countRows(ctx context.Context, query string, args ...any) int {
 	var count int

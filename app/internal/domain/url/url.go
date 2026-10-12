@@ -37,6 +37,10 @@ type (
 		ogTitle       string
 		ogDescription string
 		ogImageUrl    string
+
+		// loadedUpdatedAt is the updated time the url was hydrated with; zero for a url that is not stored yet. A
+		// datastore uses it as the version to guard an update with, because updatedAt moves on with every change.
+		loadedUpdatedAt time.Time
 	}
 
 	// URLParams represents the parameters for creating or updating a url
@@ -129,6 +133,8 @@ func NewUrl(params URLParams) (*URL, error) {
 		ogTitle:       params.OgTitle,
 		ogDescription: params.OgDescription,
 		ogImageUrl:    params.OgImageUrl,
+
+		loadedUpdatedAt: aggregateRoot.UpdatedAt(),
 	}, nil
 }
 
@@ -175,6 +181,7 @@ func Create(params CreateURLParams) (*URL, error) {
 		return nil, err
 	}
 
+	url.loadedUpdatedAt = time.Time{} // nothing is stored yet, so there is no version to guard an update with
 	url.ApplyDomain(URLCreated{
 		baseEvent:   newBaseEvent("url.created"),
 		URLID:       entity.IDToString(url.ID()),
@@ -306,6 +313,12 @@ func (url *URL) transition(to URLStatus, from ...URLStatus) error {
 
 func (url *URL) touch() {
 	url.EntityTimestamp = url.EntityTimestamp.WithUpdatedAt(time.Now())
+}
+
+// LoadedUpdatedAt is the updated time the url was loaded with: the version an update is guarded with, so a writer that
+// worked from a stale copy does not overwrite a newer change. Zero for a url that was never stored.
+func (url *URL) LoadedUpdatedAt() time.Time {
+	return url.loadedUpdatedAt
 }
 
 func (url *URL) UserId() entity.ID {

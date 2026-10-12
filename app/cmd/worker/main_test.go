@@ -154,3 +154,14 @@ func TestHealthcheck_GivesUpAfterTheTimeout(t *testing.T) {
 	assert.Equal(t, 1, code)
 	assert.Less(t, time.Since(start), 2*time.Second)
 }
+
+func TestExpiryConfig_MapsTheSettingsAndTakesTheStandbyIntervalFromTheRelay(t *testing.T) {
+	cfg := expiryConfig(config.Worker{
+		Expiry: config.ExpirySettings{Interval: 30 * time.Second, BatchSize: 250},
+		Outbox: config.OutboxSettings{StandbyInterval: 2 * time.Second},
+	})
+
+	assert.Equal(t, 30*time.Second, cfg.Interval)
+	assert.Equal(t, 250, cfg.BatchSize)
+	assert.Equal(t, 2*time.Second, cfg.StandbyInterval)
+}

@@ -47,11 +47,24 @@ type URLAccessed struct {
 	baseEvent
 	URLID       string
 	ShortCode   string
-	IPAddress   string
+	IPAddress   string // never set: no raw IP leaves the process (#344)
 	UserAgent   string
 	Referer     string
 	CountryCode string // resolved by GeoIP before publishing
 	DeviceType  string // mobile | desktop | bot
+}
+
+// NewURLAccessed raises a URLAccessed. It takes no IP address: the country is resolved from it before this point and the
+// address is not published (see IPAddress).
+func NewURLAccessed(shortCode, userAgent, referer, countryCode, deviceType string) URLAccessed {
+	return URLAccessed{
+		baseEvent:   newBaseEvent("url.accessed"),
+		ShortCode:   shortCode,
+		UserAgent:   userAgent,
+		Referer:     referer,
+		CountryCode: countryCode,
+		DeviceType:  deviceType,
+	}
 }
 
 type URLExpired struct {

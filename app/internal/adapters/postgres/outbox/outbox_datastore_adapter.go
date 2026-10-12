@@ -4,46 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"log/slog"
 	"math"
-	"strconv"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
 	"github.com/sanctumlabs/fupi/app/internal/ports"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 )
 
-// leaseKey is the advisory lock key of the relay lease, derived from a fixed name so every instance computes the same one.
-var leaseKey = func() int64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte("fupi.outbox.relay"))
-	return int64(h.Sum64())
-}()
-
 var _ ports.OutboxDatastore = (*Adapter)(nil)
 
 // Adapter implements ports.OutboxDatastore on Postgres.
 type Adapter struct {
+	*Leaser
 	queries *postgresql.Queries
-	// leaseConfig opens the dedicated connection the lease lives on. It is parsed through the pool's parser so the
-	// pool_* parameters of the connection string are removed; a plain connection would send them to the server.
-	leaseConfig      *pgx.ConnConfig
-	timeout          time.Duration
+	timeout time.Duration
+	// leaseIdleTimeout is handed to the Leaser; see WithLeaseIdleTimeout.
 	leaseIdleTimeout time.Duration
 }
 
-// defaultLeaseIdleTimeout is how long the server lets the lease connection sit idle before it drops it. The relay checks
-// its lease on every cycle, which takes far less than this, so a healthy holder is never idle that long.
-const defaultLeaseIdleTimeout = 60 * time.Second
-
-// leaseApplicationName tells the lease connection apart from the others in pg_stat_activity.
-const leaseApplicationName = "fupi-outbox-lease"
+// outboxLeaseKey names the relay's advisory lock; leaseApplicationName tells its connection apart in pg_stat_activity.
+const (
+	outboxLeaseKey       = "fupi.outbox.relay"
+	leaseApplicationName = "fupi-outbox-lease"
+)
 
 // Option configures an Adapter.
 type Option func(*Adapter)
@@ -57,35 +44,19 @@ func WithLeaseIdleTimeout(d time.Duration) Option {
 // NewAdapter builds the adapter. connString is the same connection string the pool was built from; timeout bounds every
 // statement, because the relay runs some of them on a context that does not carry a deadline.
 func NewAdapter(client database.PostgresDatabaseClient, connString string, timeout time.Duration, opts ...Option) (*Adapter, error) {
-	poolConfig, err := pgxpool.ParseConfig(connString)
-	if err != nil {
-		return nil, fmt.Errorf("parse the connection string for the outbox lease: %w", err)
-	}
-	// The lease connection is housekeeping and must not create a span per statement.
-	poolConfig.ConnConfig.Tracer = nil
-
 	a := &Adapter{
 		queries:          postgresql.New(client.GetDB()),
-		leaseConfig:      poolConfig.ConnConfig,
 		timeout:          timeout,
-		leaseIdleTimeout: defaultLeaseIdleTimeout,
+		leaseIdleTimeout: DefaultLeaseIdleTimeout,
 	}
 	for _, opt := range opts {
 		opt(a)
 	}
-
-	// A holder that vanishes without closing its connection (a dead host, a partition) leaves a backend that never notices,
-	// and the advisory lock would stay held for as long as the operating system or a proxy keeps the idle socket (hours),
-	// with no standby able to take over. Asking the server to drop a session that sits idle bounds that to the timeout.
-	// A holder that is alive checks its lease on every cycle, so it is never idle that long; one that is merely slow loses
-	// the lease, which is safe: it notices on its next check and asks for it again. Needs PostgreSQL 14 or newer.
-	runtimeParams := make(map[string]string, len(a.leaseConfig.RuntimeParams)+2)
-	for key, value := range a.leaseConfig.RuntimeParams {
-		runtimeParams[key] = value
+	leaser, err := NewLeaser(connString, outboxLeaseKey, leaseApplicationName, timeout, a.leaseIdleTimeout)
+	if err != nil {
+		return nil, err
 	}
-	runtimeParams["application_name"] = leaseApplicationName
-	runtimeParams["idle_session_timeout"] = strconv.FormatInt(a.leaseIdleTimeout.Milliseconds(), 10)
-	a.leaseConfig.RuntimeParams = runtimeParams
+	a.Leaser = leaser
 	return a, nil
 }
 
@@ -102,53 +73,6 @@ func clampInt32(n int) int32 {
 
 func (a *Adapter) bounded(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, a.timeout)
-}
-
-// Acquire takes the relay lease: a session-level advisory lock on a dedicated connection. The lock disappears with
-// the connection, so a crashed instance, or a failover to a new primary, releases it without anyone cleaning up.
-func (a *Adapter) Acquire(ctx context.Context) (ports.Lease, error) {
-	ctx, cancel := a.bounded(ctx)
-	defer cancel()
-
-	conn, err := pgx.ConnectConfig(ctx, a.leaseConfig)
-	if err != nil {
-		return nil, fmt.Errorf("open the outbox lease connection: %w", err)
-	}
-	var acquired bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", leaseKey).Scan(&acquired); err != nil {
-		_ = conn.Close(context.WithoutCancel(ctx))
-		return nil, fmt.Errorf("take the outbox lease: %w", err)
-	}
-	if !acquired {
-		_ = conn.Close(context.WithoutCancel(ctx))
-		return nil, ports.ErrNotLeader
-	}
-	return &lease{conn: conn, timeout: a.timeout}, nil
-}
-
-type lease struct {
-	conn    *pgx.Conn
-	timeout time.Duration
-}
-
-// Alive runs a trivial statement on the lease's own connection; it fails once the connection, and with it the lock, is gone.
-func (l *lease) Alive(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, l.timeout)
-	defer cancel()
-	var one int
-	if err := l.conn.QueryRow(ctx, "SELECT 1").Scan(&one); err != nil {
-		return fmt.Errorf("the outbox lease connection is not usable: %w", err)
-	}
-	return nil
-}
-
-// Release closes the connection, which releases the lock.
-func (l *lease) Release() {
-	ctx, cancel := context.WithTimeout(context.Background(), l.timeout)
-	defer cancel()
-	if err := l.conn.Close(ctx); err != nil {
-		slog.Warn("closing the outbox lease connection", "error", err)
-	}
 }
 
 // Claim returns up to perDestination of the oldest unsent, unparked events of every destination, in creation order.
