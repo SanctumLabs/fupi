@@ -138,6 +138,16 @@ func Create(params CreateURLParams) (*URL, error) {
 		return nil, fmt.Errorf("%w: '%s'", errdefs.ErrPastExpiration, params.ExpiresOn)
 	}
 
+	// Short codes and custom aliases share one redirect namespace but are unique only within their own column, so a new
+	// alias must not have a shape a short code can have: one that did could equal a code generated later, and the code
+	// would win the lookup (ADR-0020). The rule is checked here, not in NewCustomAlias, so aliases stored before it
+	// still load.
+	if params.CustomAlias != "" {
+		if _, shortCodeErr := NewShortCode(params.CustomAlias); shortCodeErr == nil {
+			return nil, fmt.Errorf("%w: '%s'", errdefs.ErrCustomAliasLikeShortCode, params.CustomAlias)
+		}
+	}
+
 	now := time.Now()
 	url, err := NewUrl(URLParams{
 		AggregateRootParams: entity.AggregateRootParams{

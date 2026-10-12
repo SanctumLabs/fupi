@@ -25,6 +25,7 @@ var (
 	ErrUserDoestNotExist            = errors.New("User '%s' does not exist")
 	ErrCustomAliasInvalidLength     = errors.New("custom alias must be between 3 and 12 characters")
 	ErrCustomAliasInvalidCharacters = errors.New("custom alias can only contain alphanumeric characters and dashes")
+	ErrCustomAliasLikeShortCode     = errors.New("custom alias must not look like a short code: use 3 to 5 or 11 to 12 characters, or include a dash")
 	ErrInvalidURLLen                = errors.New("original url length is invalid")
 	ErrPastExpiration               = errors.New("expiration date must be in the future")
 	ErrKeywordsCount                = errors.New("cannot have more than 10 keywords")

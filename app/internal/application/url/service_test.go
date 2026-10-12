@@ -104,6 +104,7 @@ func (suite *UrlServiceTestSuite) TestShorten_RejectsInvalidInputWithoutSaving()
 		"past expiry":     {UserID: suite.userID, OriginalURL: "https://example.com/a/long/path", ExpiresOn: time.Now().Add(-time.Hour)},
 		"missing expiry":  {UserID: suite.userID, OriginalURL: "https://example.com/a/long/path"},
 		"invalid alias":   {UserID: suite.userID, OriginalURL: "https://example.com/a/long/path", ExpiresOn: time.Now().Add(time.Hour), CustomAlias: "no spaces!"},
+		"code-like alias": {UserID: suite.userID, OriginalURL: "https://example.com/a/long/path", ExpiresOn: time.Now().Add(time.Hour), CustomAlias: "Abc1234"},
 		"invalid keyword": {UserID: suite.userID, OriginalURL: "https://example.com/a/long/path", ExpiresOn: time.Now().Add(time.Hour), Keywords: []string{"x"}},
 	}
 

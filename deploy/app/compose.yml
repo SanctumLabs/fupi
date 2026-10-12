@@ -32,6 +32,7 @@ x-app-env: &app-env
   REDIS_USERNAME: ${REDIS_USERNAME:-fupi-svc}
   REDIS_PASSWORD: ${REDIS_PASSWORD:-fupi-svc}
   AUTH_SECRET: ${AUTH_SECRET:-fupi-secret}
+  SHORT_CODE_KEY: ${SHORT_CODE_KEY:-fupi-short-code-key-for-development-only}
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
   OTEL_SERVICE_NAME: fupi
 

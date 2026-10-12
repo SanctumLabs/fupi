@@ -20,9 +20,10 @@ func TestSequenceShortCodeGenerator_InstancesNeverIssueTheSameCode(t *testing.T)
 	dbClient := test.TestPostgresDatabaseClientHelper(t, ctx)
 	t.Cleanup(dbClient.Close)
 
+	key := []byte("an-integration-test-key-at-least-32-bytes")
 	generators := []ports.ShortCodeGenerator{
-		postgresrepo.NewSequenceShortCodeGenerator(dbClient),
-		postgresrepo.NewSequenceShortCodeGenerator(dbClient),
+		postgresrepo.NewSequenceShortCodeGenerator(dbClient, key),
+		postgresrepo.NewSequenceShortCodeGenerator(dbClient, key),
 	}
 
 	seen := map[string]struct{}{}

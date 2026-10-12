@@ -186,7 +186,7 @@ func run(ctx context.Context, cfg config.App) error {
 
 	urlService := urlapp.NewService(
 		urldatastore.NewUrlDatastoreAdapter(dbClient, dbConfig),
-		postgresrepo.NewSequenceShortCodeGenerator(dbClient),
+		postgresrepo.NewSequenceShortCodeGenerator(dbClient, []byte(cfg.ShortCode.Key)),
 	)
 
 	srv := server.NewServer(server.ServerConfig{
