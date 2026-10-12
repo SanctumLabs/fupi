@@ -91,6 +91,7 @@ docker run -p 8086:8086 -e DATABASE_HOST=... -e DATABASE_NAME=... -e DATABASE_US
 | `OUTBOX_STANDBY_INTERVAL` | `5` | seconds between a standby's attempts to become the active relay |
 | `OUTBOX_RETENTION_DAYS` | `7` | days sent rows are kept; `0` keeps them forever |
 | `WORKER_HTTP_PORT` | `8086` | the health listener |
+| `SAFE_BROWSING_API_KEY` | unset | Google Safe Browsing key; when set, the worker scans every created url and suspends flagged ones (ADR-0022), and then also needs the `REDIS_*` and `REDIRECT_CACHE_*` settings. Unset, it does not scan |
 
 The database, logging and telemetry variables are the API's; the worker's service name defaults to `fupi-worker`.
 
