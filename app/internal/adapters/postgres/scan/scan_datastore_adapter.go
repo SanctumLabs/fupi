@@ -3,11 +3,14 @@ package scandatastore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
 	"github.com/sanctumlabs/fupi/app/internal/ports"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 )
@@ -47,7 +50,10 @@ func (a *Adapter) ExistsByUrlAndProvider(ctx context.Context, urlID, provider st
 	return exists, nil
 }
 
-// Save stores the result of scanning the url.
+// foreignKeyViolation is the SQLSTATE of a row that references a row that does not exist.
+const foreignKeyViolation = "23503"
+
+// Save stores the result of scanning the url. A url that no longer exists (it was purged after it was scanned) is NotFound.
 func (a *Adapter) Save(ctx context.Context, urlID string, result ports.ScanResult) error {
 	id, err := postgres.StringToUUID(urlID)
 	if err != nil {
@@ -62,6 +68,10 @@ func (a *Adapter) Save(ctx context.Context, urlID string, result ports.ScanResul
 		Result:      string(result.Verdict),
 		RawResponse: result.RawResponse,
 	}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+			return errdefs.NotFound(fmt.Errorf("url %s: %w", urlID, err))
+		}
 		return fmt.Errorf("save the scan of url %s by %s: %w", urlID, result.Provider, err)
 	}
 	return nil
