@@ -52,6 +52,9 @@ func (svc *Service) Shorten(ctx context.Context, cmd ShortenCommand) (_ url.URL,
 		return url.URL{}, saveErr
 	}
 
+	// A probe for this code may have cached it as absent.
+	svc.evictRedirects(ctx, &saved)
+
 	slog.InfoContext(ctx, fmt.Sprintf("%s Shortened url", handlerLogPrefix), "url_id", entity.IDToString(saved.ID()), "short_code", shortCode.Value())
 
 	return saved, nil

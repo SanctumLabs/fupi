@@ -189,13 +189,7 @@ func Create(params CreateURLParams) (*URL, error) {
 
 // Redirect returns the original url to redirect to. Only an ACTIVE, unexpired url redirects.
 func (url *URL) Redirect() (OriginalURL, error) {
-	if url.status != URLStatusActive {
-		return OriginalURL{}, errdefs.ErrURLNotActive
-	}
-	if !url.expiresOn.After(time.Now()) {
-		return OriginalURL{}, errdefs.ErrURLExpired
-	}
-	return url.originalUrl, nil
+	return RedirectTarget{originalUrl: url.originalUrl, status: url.status, expiresOn: url.expiresOn}.Redirect()
 }
 
 // MarkExpired transitions ACTIVE → EXPIRED and records URLExpired.

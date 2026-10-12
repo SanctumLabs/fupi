@@ -141,9 +141,15 @@ func (suite *UrlServiceTestSuite) TestShorten_ReturnsGeneratorAndSaveFailures() 
 
 // --- Resolve ----------------------------------------------------------------------------------
 
-func (suite *UrlServiceTestSuite) TestResolve_ReturnsTheTargetOfAnActiveShortCode() {
-	active := suite.ownedUrl(urlmock.WithOriginalUrl("https://example.com/target/page"))
-	suite.mockUrls.EXPECT().FetchByShortCode(gomock.Any(), "000abc").Return(active, nil)
+func (suite *UrlServiceTestSuite) redirectTarget(rawUrl string, status url.URLStatus, expiresOn time.Time) url.RedirectTarget {
+	target, err := url.NewRedirectTarget(rawUrl, status, expiresOn)
+	suite.Require().NoError(err)
+	return target
+}
+
+func (suite *UrlServiceTestSuite) TestResolve_ReturnsTheTargetOfAnActiveCode() {
+	active := suite.redirectTarget("https://example.com/target/page", url.URLStatusActive, time.Now().Add(time.Hour))
+	suite.mockUrls.EXPECT().FetchRedirectTarget(gomock.Any(), "000abc").Return(active, nil)
 
 	target, err := suite.service.Resolve(context.Background(), "000abc")
 
@@ -151,20 +157,8 @@ func (suite *UrlServiceTestSuite) TestResolve_ReturnsTheTargetOfAnActiveShortCod
 	suite.Equal("https://example.com/target/page", target.Value())
 }
 
-func (suite *UrlServiceTestSuite) TestResolve_FallsBackToTheCustomAlias() {
-	active := suite.ownedUrl(urlmock.WithOriginalUrl("https://example.com/target/page"))
-	suite.mockUrls.EXPECT().FetchByShortCode(gomock.Any(), "my-alias").Return(url.URL{}, errdefs.NotFound(errors.New("no rows")))
-	suite.mockUrls.EXPECT().FetchByCustomAlias(gomock.Any(), "my-alias").Return(active, nil)
-
-	target, err := suite.service.Resolve(context.Background(), "my-alias")
-
-	suite.Require().NoError(err)
-	suite.Equal("https://example.com/target/page", target.Value())
-}
-
 func (suite *UrlServiceTestSuite) TestResolve_UnknownCodeIsNotFound() {
-	suite.mockUrls.EXPECT().FetchByShortCode(gomock.Any(), "nope").Return(url.URL{}, errdefs.NotFound(errors.New("no rows")))
-	suite.mockUrls.EXPECT().FetchByCustomAlias(gomock.Any(), "nope").Return(url.URL{}, errdefs.NotFound(errors.New("no rows")))
+	suite.mockUrls.EXPECT().FetchRedirectTarget(gomock.Any(), "nope").Return(url.RedirectTarget{}, errdefs.NotFound(errors.New("no rows")))
 
 	_, err := suite.service.Resolve(context.Background(), "nope")
 
@@ -172,15 +166,16 @@ func (suite *UrlServiceTestSuite) TestResolve_UnknownCodeIsNotFound() {
 }
 
 func (suite *UrlServiceTestSuite) TestResolve_UrlThatMayNotRedirectIsNotFound() {
-	cases := map[string]url.URL{
-		"expired":   suite.ownedUrl(urlmock.WithExpiresOn(time.Now().Add(-time.Hour))),
-		"deleted":   suite.ownedUrl(urlmock.WithStatus(url.URLStatusDeleted)),
-		"suspended": suite.ownedUrl(urlmock.WithStatus(url.URLStatusSuspended)),
+	future, past := time.Now().Add(time.Hour), time.Now().Add(-time.Hour)
+	cases := map[string]url.RedirectTarget{
+		"expired":   suite.redirectTarget("https://example.com/target/page", url.URLStatusActive, past),
+		"deleted":   suite.redirectTarget("https://example.com/target/page", url.URLStatusDeleted, future),
+		"suspended": suite.redirectTarget("https://example.com/target/page", url.URLStatusSuspended, future),
 	}
 
 	for name, found := range cases {
 		suite.Run(name, func() {
-			suite.mockUrls.EXPECT().FetchByShortCode(gomock.Any(), "000abc").Return(found, nil)
+			suite.mockUrls.EXPECT().FetchRedirectTarget(gomock.Any(), "000abc").Return(found, nil)
 
 			_, err := suite.service.Resolve(context.Background(), "000abc")
 
@@ -191,7 +186,7 @@ func (suite *UrlServiceTestSuite) TestResolve_UrlThatMayNotRedirectIsNotFound() 
 
 func (suite *UrlServiceTestSuite) TestResolve_DatastoreFailureIsNotHidden() {
 	dbErr := errors.New("connection reset")
-	suite.mockUrls.EXPECT().FetchByShortCode(gomock.Any(), "000abc").Return(url.URL{}, dbErr)
+	suite.mockUrls.EXPECT().FetchRedirectTarget(gomock.Any(), "000abc").Return(url.RedirectTarget{}, dbErr)
 
 	_, err := suite.service.Resolve(context.Background(), "000abc")
 

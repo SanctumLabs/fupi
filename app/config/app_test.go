@@ -374,3 +374,13 @@ func TestEnvExample_SetsEachKeyOnce(t *testing.T) {
 		assert.Equal(t, 1, count, "%s is set %d times in .env.example", key, count)
 	}
 }
+
+func TestLoadRedirectCache_DefaultsAndValidation(t *testing.T) {
+	cfg, err := LoadRedirectCache(lookupOf(nil))
+	require.NoError(t, err)
+	require.Equal(t, 300*time.Second, cfg.TTL)
+	require.Equal(t, 30*time.Second, cfg.AbsentTTL)
+
+	_, err = LoadRedirectCache(lookupOf(map[string]string{"REDIRECT_CACHE_TTL": "0"}))
+	require.ErrorContains(t, err, "REDIRECT_CACHE_TTL")
+}
