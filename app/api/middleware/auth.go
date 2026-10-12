@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"log/slog"
+	"regexp"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -23,6 +24,10 @@ type AuthConfig struct {
 
 	// PublicPrefixes are path prefixes that skip authentication, for whole open subtrees.
 	PublicPrefixes []string
+
+	// PublicPatterns are anchored patterns for public paths that carry a variable, such as the
+	// short-url redirect. Keep each one as narrow as the route it opens.
+	PublicPatterns []*regexp.Regexp
 }
 
 // AuthMiddleware authenticates requests carrying a `Authorization: Bearer <token>` header and
@@ -45,6 +50,11 @@ func AuthMiddleware(config AuthConfig) fiber.Handler {
 		}
 		for _, prefix := range config.PublicPrefixes {
 			if strings.HasPrefix(path, prefix) {
+				return ctx.Next()
+			}
+		}
+		for _, pattern := range config.PublicPatterns {
+			if pattern.MatchString(path) {
 				return ctx.Next()
 			}
 		}

@@ -1,7 +1,4 @@
-// Command fupi runs the Fupi HTTP API.
-//
-// Only the Identity bounded context is wired up so far; the URL context follows once its
-// application layer exists.
+// Command fupi runs the Fupi HTTP API: the Identity and URL bounded contexts.
 package main
 
 import (
@@ -13,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"syscall"
 	"time"
@@ -21,11 +19,15 @@ import (
 	apimiddleware "github.com/sanctumlabs/fupi/app/api/middleware"
 	"github.com/sanctumlabs/fupi/app/api/probes"
 	identityapi "github.com/sanctumlabs/fupi/app/api/v1/identity"
+	urlapi "github.com/sanctumlabs/fupi/app/api/v1/url"
 	"github.com/sanctumlabs/fupi/app/config"
 	"github.com/sanctumlabs/fupi/app/internal/adapters/jwtauth"
 	"github.com/sanctumlabs/fupi/app/internal/adapters/notifications"
+	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
 	identitydatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/identity"
+	urldatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/url"
 	identityapp "github.com/sanctumlabs/fupi/app/internal/application/identity"
+	urlapp "github.com/sanctumlabs/fupi/app/internal/application/url"
 	"github.com/sanctumlabs/fupi/app/pkg"
 	cacheredis "github.com/sanctumlabs/fupi/app/pkg/infra/cache/redis"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
@@ -182,6 +184,11 @@ func run(ctx context.Context, cfg config.App) error {
 		notifier,
 	)
 
+	urlService := urlapp.NewService(
+		urldatastore.NewUrlDatastoreAdapter(dbClient, dbConfig),
+		postgresrepo.NewSequenceShortCodeGenerator(dbClient),
+	)
+
 	srv := server.NewServer(server.ServerConfig{
 		Header:      cfg.Server.Header,
 		Host:        cfg.Server.Host,
@@ -193,7 +200,8 @@ func run(ctx context.Context, cfg config.App) error {
 	})
 
 	// Everything is authenticated unless it is listed here. Registration, login, token refresh
-	// and email verification must be reachable without a token, by definition, and so must the probes.
+	// and email verification must be reachable without a token, by definition, and so must the probes
+	// and the short-url redirect.
 	srv.Use(apimiddleware.AuthMiddleware(apimiddleware.AuthConfig{
 		TokenService: tokenService,
 		PublicPaths: []string{
@@ -205,11 +213,14 @@ func run(ctx context.Context, cfg config.App) error {
 			probes.ReadyPath,
 		},
 		PublicPrefixes: []string{"/docs/"},
+		PublicPatterns: []*regexp.Regexp{urlapi.RedirectPathPattern},
 	}))
 
 	srv.RegisterHandlers([]router.Router{
 		probes.NewRouter(registry),
 		identityapi.NewRouter(baseURI, identityService),
+		// Last: its redirect matches any single-segment path.
+		urlapi.NewRouter(baseURI, cfg.Server.BaseURL, urlService),
 	})
 
 	serveErr := srv.Serve(ctx, cfg.ShutdownTimeout, registry.SetDraining)
