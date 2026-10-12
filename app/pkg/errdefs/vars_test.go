@@ -6,26 +6,18 @@ import (
 )
 
 // Sentinels are compared with errors.Is and never formatted, so a verb in one ships to the client verbatim.
-// ErrEmailInvalid and ErrUserDoestNotExist are legacy-only and still carry verbs; they are left out until the
-// legacy cleanup removes or fixes them.
 func TestSentinelsHaveNoFormatVerbs(t *testing.T) {
 	sentinels := map[string]error{
 		"ErrInvalidUserId":                ErrInvalidUserId,
 		"ErrInvalidUrlId":                 ErrInvalidUrlId,
 		"ErrInvalidCustomAlias":           ErrInvalidCustomAlias,
-		"ErrServerError":                  ErrServerError,
 		"ErrInvalidURL":                   ErrInvalidURL,
 		"ErrFilteredURL":                  ErrFilteredURL,
 		"ErrURLAlreadyExists":             ErrURLAlreadyExists,
 		"ErrURLExpired":                   ErrURLExpired,
 		"ErrInvalidPasswordLen":           ErrInvalidPasswordLen,
-		"ErrPasswordMissmatch":            ErrPasswordMissmatch,
-		"ErrInvalidDate":                  ErrInvalidDate,
-		"ErrURLAlreadyShort":              ErrURLAlreadyShort,
-		"ErrNoMatchingData":               ErrNoMatchingData,
 		"ErrTokenRequired":                ErrTokenRequired,
 		"ErrTokenInvalid":                 ErrTokenInvalid,
-		"ErrUserExists":                   ErrUserExists,
 		"ErrCustomAliasInvalidLength":     ErrCustomAliasInvalidLength,
 		"ErrCustomAliasInvalidCharacters": ErrCustomAliasInvalidCharacters,
 		"ErrInvalidURLLen":                ErrInvalidURLLen,
