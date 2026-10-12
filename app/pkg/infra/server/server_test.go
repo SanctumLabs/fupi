@@ -20,14 +20,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The server must start even when no OpenAPI spec has been generated; a missing docs file is not
-// a reason to take the service down.
-func TestNewServer_StartsWithoutSwaggerSpecs(t *testing.T) {
-	require.NotPanics(t, func() {
-		srv := NewServer(ServerConfig{Port: 0, AppName: "fupi-test"})
-		require.NotNil(t, srv)
-		require.NotNil(t, srv.App())
-	})
+// The generated spec is embedded, so the docs are served whatever the working directory is.
+func TestNewServer_ServesTheEmbeddedOpenAPISpec(t *testing.T) {
+	srv := NewServer(ServerConfig{Port: 0, AppName: "fupi-test"})
+
+	for path, want := range map[string]string{"/docs/": "text/html", "/docs/swagger.json": "application/json"} {
+		resp, err := srv.App().Test(httptest.NewRequest(http.MethodGet, path, nil))
+		require.NoError(t, err, path)
+		assert.Equal(t, http.StatusOK, resp.StatusCode, path)
+		assert.Contains(t, resp.Header.Get("Content-Type"), want, path)
+	}
 }
 
 type stubRouter struct{ routes []router.Route }

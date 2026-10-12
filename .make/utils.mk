@@ -53,8 +53,16 @@ buf.dep.update: ## Update Buf dependencies
 	buf dep update
 	@echo ${GREEN} "Done updating Buf dependencies ${NC}" 
 
+SWAG ?= go run github.com/swaggo/swag/cmd/swag@v1.16.4
+OPENAPI_DIR ?= app/api/openapi
+
 .PHONY: generate.open.api.docs
-generate.open.api.docs: ## Generate OpenApi Docs
+generate.open.api.docs: ## Generate the OpenAPI spec (Swagger 2.0) from the handler annotations into app/api/openapi, which the server embeds
 	@echo "${GREEN} Generating Open API Docs ${NC}"
-	swag init --generalInfo main.go --dir cmd,api/rest/routes/service/v1/fupi,api/rest/routes/monitoring/health --output api/openapi-spec
+	$(SWAG) init --generalInfo main.go --dir app/cmd,app/api --parseDependency --output $(OPENAPI_DIR) --outputTypes json
 	@echo "${GREEN} Done Generating Open API Docs ${NC}"
+
+.PHONY: check.open.api.docs
+check.open.api.docs: generate.open.api.docs ## Fails when the committed OpenAPI spec differs from what the handler annotations generate
+	git diff --exit-code -- $(OPENAPI_DIR)
+	@test -z "$$(git ls-files --others --exclude-standard -- $(OPENAPI_DIR))" || { echo "untracked OpenAPI files, run make generate.open.api.docs and commit"; exit 1; }

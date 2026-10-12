@@ -32,10 +32,27 @@ func NewRouter(registry *health.Registry) router.Router {
 
 func (r *probesRouter) Routes() []router.Route { return r.routes }
 
+// live answers 200 while the process runs.
+//
+// Live godoc
+// @Summary     Liveness probe
+// @Tags        probes
+// @Produce     json
+// @Success     200 {object} map[string]string
+// @Router      /health [get]
 func (r *probesRouter) live(ctx *fiber.Ctx) error {
 	return ctx.JSON(fiber.Map{"status": "ok"})
 }
 
+// ready answers 200 when the process can serve traffic and 503 when it cannot or is draining.
+//
+// Ready godoc
+// @Summary     Readiness probe
+// @Tags        probes
+// @Produce     json
+// @Success     200 {object} health.Report
+// @Failure     503 {object} health.Report
+// @Router      /health/ready [get]
 func (r *probesRouter) ready(ctx *fiber.Ctx) error {
 	report := r.registry.Run(ctx.UserContext())
 	status := fiber.StatusOK
