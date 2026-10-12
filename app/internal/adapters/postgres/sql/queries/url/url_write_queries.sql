@@ -24,7 +24,8 @@ DELETE FROM urls WHERE id = $1 RETURNING *;
 
 -- Persists the state the URL aggregate owns after a transition. deleted_at follows the status, so
 -- the DELETED transition releases the target for reuse (idx_urls_original_url is partial on
--- deleted_at IS NULL) and no other status can leave a stale deleted_at behind.
+-- deleted_at IS NULL) and no other status can leave a stale deleted_at behind. When expected_updated_at is set the
+-- update applies only if the row still has that updated_at (optimistic concurrency); no row comes back otherwise.
 -- name: QueryUpdateUrl :one
 UPDATE urls
 SET
@@ -32,7 +33,8 @@ SET
   expires_on = sqlc.arg(expires_on),
   deleted_at = CASE WHEN sqlc.arg(status)::url_status = 'DELETED' THEN COALESCE(deleted_at, NOW()) END,
   updated_at = NOW()
-WHERE id = sqlc.arg(id) RETURNING *;
+WHERE id = sqlc.arg(id)
+  AND (sqlc.narg(expected_updated_at)::timestamptz IS NULL OR updated_at = sqlc.narg(expected_updated_at)::timestamptz) RETURNING *;
 
 -- Claims the next block of short code counter values. short_code_counter increments by the block
 -- size, so the caller owns [value, value + block size).

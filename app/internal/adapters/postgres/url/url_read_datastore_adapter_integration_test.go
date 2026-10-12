@@ -326,6 +326,22 @@ func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchExpiredActive
 	suite.Empty(actual)
 }
 
+// TestCountExpiredActive_CountsAllExpiredUrlsNotJustABatch is the expiry job's backlog: every ACTIVE URL past its
+// expiry counts, whatever the batch size, and one still in the future does not.
+func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestCountExpiredActive_CountsAllExpiredUrlsNotJustABatch() {
+	ctx, cancel := suite.newContext()
+	defer cancel()
+
+	for i := range 3 {
+		suite.seedUrl(ctx, urlmock.WithExpiresOn(time.Now().Add(-time.Duration(i+1)*time.Hour)))
+	}
+	suite.seedUrl(ctx, urlmock.WithExpiresOn(time.Now().Add(24*time.Hour)))
+
+	actual, actualErr := suite.urlReadDatastoreAdapter.CountExpiredActive(ctx, time.Now())
+	suite.Require().NoError(actualErr)
+	suite.Equal(int64(3), actual)
+}
+
 // TestFetchByOriginalUrl_FindsRespelledTarget closes the loop on normalization: the row is stored in
 // canonical form, and a lookup spelled differently must still find it.
 func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByOriginalUrl_FindsRespelledTarget() {

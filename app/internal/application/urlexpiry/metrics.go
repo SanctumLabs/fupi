@@ -14,7 +14,7 @@ type metrics struct {
 	failures metric.Int64Counter
 
 	leader  atomic.Bool
-	backlog atomic.Int64 // URLs the last run found past their expiry and could not expire
+	backlog atomic.Int64 // URLs still ACTIVE past their expiry at the end of the last run
 	lastRun atomic.Int64 // unix seconds of the last run that fetched; 0 before the first
 }
 
@@ -52,7 +52,7 @@ func newMetrics(provider metric.MeterProvider) (*metrics, error) {
 		}
 		return 0
 	})
-	gauge("url.expiry.backlog", "{url}", "URLs past their expiry that the last run could not expire.", true,
+	gauge("url.expiry.backlog", "{url}", "URLs past their expiry that were still ACTIVE at the end of the last run.", true,
 		func() float64 { return float64(m.backlog.Load()) })
 	gauge("url.expiry.last_run", "s", "Unix time of the last run.", true,
 		func() float64 { return float64(m.lastRun.Load()) })

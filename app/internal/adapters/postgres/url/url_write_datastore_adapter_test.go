@@ -279,6 +279,8 @@ func (suite *UrlWriteDatastoreAdapterTestSuite) TestUpdate_PersistsStatusExpiryK
 				ID:        urlID,
 				Status:    postgresql.UrlStatusDELETED,
 				ExpiresOn: pgtype.Timestamptz{Time: mockUrl.ExpiresOn(), Valid: true},
+				// the version the url was loaded with, not the updated time the change gave it
+				ExpectedUpdatedAt: pgtype.Timestamptz{Time: mockUrl.LoadedUpdatedAt(), Valid: true},
 			}).
 			Return(updatedRow, nil),
 		suite.mockUrlWriteQuerier.EXPECT().QueryDeleteKeywordsByUrlId(gomock.Any(), urlID).Return(nil),
@@ -302,12 +304,57 @@ func (suite *UrlWriteDatastoreAdapterTestSuite) TestUpdate_MissingUrlIsNotFound(
 	mockUrl, mockUrlErr := urlmock.MockUrl(urlmock.WithExpiresOn(time.Now().Add(time.Hour * 24)))
 	suite.Require().NoError(mockUrlErr)
 
-	suite.mockUrlWriteQuerier.EXPECT().
-		QueryUpdateUrl(gomock.Any(), gomock.Any()).
-		Return(postgresql.Url{}, pgx.ErrNoRows).
-		Times(1)
+	gomock.InOrder(
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryUpdateUrl(gomock.Any(), gomock.Any()).
+			Return(postgresql.Url{}, pgx.ErrNoRows),
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryUrlByIdForUpdate(gomock.Any(), pgtype.UUID{Bytes: mockUrl.ID(), Valid: true}).
+			Return(postgresql.Url{}, pgx.ErrNoRows),
+	)
 
 	_, err := suite.urlWriteDatastoreAdapter.Update(context.Background(), *mockUrl)
+	suite.True(errdefs.IsNotFound(err), "expected NotFound, got %v", err)
+}
+
+// TestUpdate_ARowChangedSinceItWasLoadedIsAConflict: the guarded update matched nothing although the row exists, so
+// someone else changed it and this writer's copy is stale.
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestUpdate_ARowChangedSinceItWasLoadedIsAConflict() {
+	mockUrl, mockUrlErr := urlmock.MockUrl(urlmock.WithExpiresOn(time.Now().Add(time.Hour * 24)))
+	suite.Require().NoError(mockUrlErr)
+	urlID := pgtype.UUID{Bytes: mockUrl.ID(), Valid: true}
+
+	gomock.InOrder(
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryUpdateUrl(gomock.Any(), gomock.Any()).
+			Return(postgresql.Url{}, pgx.ErrNoRows),
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryUrlByIdForUpdate(gomock.Any(), urlID).
+			Return(postgresql.Url{ID: urlID}, nil),
+	)
+
+	_, err := suite.urlWriteDatastoreAdapter.Update(context.Background(), *mockUrl)
+	suite.True(errdefs.IsConflict(err), "expected Conflict, got %v", err)
+}
+
+// TestUpdate_AUrlThatWasNeverStoredIsNotGuarded: a zero loaded time sends no expected version, so nothing is compared.
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestUpdate_ANewUrlSendsNoExpectedVersion() {
+	shortCode, shortCodeErr := domainurl.NewShortCode("abcdef12")
+	suite.Require().NoError(shortCodeErr)
+	created, createErr := domainurl.Create(domainurl.CreateURLParams{
+		UserId:      entity.IDToString(entity.NewID()),
+		ShortCode:   shortCode,
+		OriginalUrl: "https://example.com/path/to/resource",
+		ExpiresOn:   time.Now().Add(time.Hour),
+	})
+	suite.Require().NoError(createErr)
+
+	suite.mockUrlWriteQuerier.EXPECT().
+		QueryUpdateUrl(gomock.Any(), gomock.Cond(func(p postgresql.QueryUpdateUrlParams) bool { return !p.ExpectedUpdatedAt.Valid })).
+		Return(postgresql.Url{}, pgx.ErrNoRows)
+	suite.mockUrlWriteQuerier.EXPECT().QueryUrlByIdForUpdate(gomock.Any(), gomock.Any()).Return(postgresql.Url{}, pgx.ErrNoRows)
+
+	_, err := suite.urlWriteDatastoreAdapter.Update(context.Background(), *created)
 	suite.True(errdefs.IsNotFound(err), "expected NotFound, got %v", err)
 }
 

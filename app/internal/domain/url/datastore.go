@@ -44,5 +44,9 @@ type (
 		// FetchExpiredActive retrieves up to limit ACTIVE URL entities whose expiry is before the given time.
 		// Used by the expiry background job to find URLs to transition to EXPIRED.
 		FetchExpiredActive(ctx context.Context, before time.Time, limit int) ([]URL, error)
+
+		// CountExpiredActive counts the ACTIVE URL entities whose expiry is before the given time: the expiry job's
+		// backlog.
+		CountExpiredActive(ctx context.Context, before time.Time) (int64, error)
 	}
 )

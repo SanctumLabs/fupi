@@ -10,6 +10,7 @@ import (
 	"github.com/sanctumlabs/fupi/app/internal/domain/url"
 	urlmock "github.com/sanctumlabs/fupi/app/internal/domain/url/mocks"
 	"github.com/sanctumlabs/fupi/app/internal/ports"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -95,6 +96,11 @@ func activeUrl(t *testing.T) url.URL {
 	return *u
 }
 
+// backlog scripts the count of URLs still past their expiry that the run ends with.
+func (h *harness) backlog(n int64) {
+	h.urls.EXPECT().CountExpiredActive(gomock.Any(), t0).Return(n, nil)
+}
+
 // updated records the URLs Update is called with and returns them as the datastore would.
 func (h *harness) updated(failFor ...int) *[]url.URL {
 	var calls []url.URL
@@ -113,6 +119,7 @@ func (h *harness) updated(failFor ...int) *[]url.URL {
 
 func TestJob_ExpiresTheUrlsFoundAndEmitsUrlExpired(t *testing.T) {
 	h := newHarness(t, 1, &fakeLeaser{})
+	h.backlog(0)
 	h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t)}, nil)
 	calls := h.updated()
 
@@ -128,6 +135,7 @@ func TestJob_ExpiresTheUrlsFoundAndEmitsUrlExpired(t *testing.T) {
 
 func TestJob_DrainsInBatchesUntilABatchIsShort(t *testing.T) {
 	h := newHarness(t, 1, &fakeLeaser{})
+	h.backlog(0)
 	gomock.InOrder(
 		h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t), activeUrl(t)}, nil),
 		h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t), activeUrl(t)}, nil),
@@ -142,6 +150,7 @@ func TestJob_DrainsInBatchesUntilABatchIsShort(t *testing.T) {
 
 func TestJob_AFailingUrlDoesNotBlockTheRestOfTheBatch(t *testing.T) {
 	h := newHarness(t, 1, &fakeLeaser{})
+	h.backlog(0)
 	h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t), activeUrl(t)}, nil)
 	h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t)}, nil)
 	calls := h.updated(1)
@@ -153,6 +162,7 @@ func TestJob_AFailingUrlDoesNotBlockTheRestOfTheBatch(t *testing.T) {
 
 func TestJob_StopsDrainingWhenAFullBatchMakesNoProgress(t *testing.T) {
 	h := newHarness(t, 1, &fakeLeaser{})
+	h.backlog(0)
 	h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t), activeUrl(t)}, nil).Times(1)
 	calls := h.updated(1, 2)
 
@@ -167,11 +177,42 @@ func TestJob_AFetchFailureEndsTheRunAndTheNextOneTriesAgain(t *testing.T) {
 		h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return(nil, errStore),
 		h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t)}, nil),
 	)
+	h.urls.EXPECT().CountExpiredActive(gomock.Any(), t0).Return(int64(0), errStore).Times(2)
 	calls := h.updated()
 
 	require.NoError(t, h.job.Run(h.ctx))
 
 	assert.Len(t, *calls, 1)
+}
+
+// Someone else changed the url between the load and the save (a user suspended it, extended its expiry): the datastore
+// reports a Conflict and the job leaves the url alone. That is not a failure, and the run carries on.
+func TestJob_AUrlChangedByAnotherWriterIsSkippedNotCounted(t *testing.T) {
+	h := newHarness(t, 1, &fakeLeaser{})
+	gomock.InOrder(
+		h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t), activeUrl(t)}, nil),
+		h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return(nil, nil),
+	)
+	h.backlog(0)
+	var calls int
+	h.urls.EXPECT().Update(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, u url.URL) (url.URL, error) {
+			calls++
+			if calls == 1 {
+				return url.URL{}, errdefs.Conflict(errStore)
+			}
+			return u, nil
+		}).Times(2)
+	var seen metricdata.ResourceMetrics
+	h.job.sleep = func(ctx context.Context, d time.Duration) {
+		require.NoError(t, h.reader.Collect(ctx, &seen))
+		h.cancel()
+	}
+
+	require.NoError(t, h.job.Run(h.ctx))
+
+	assert.Equal(t, int64(1), counterTotal(t, seen, "url.expiry.expired"), "only the url that was saved")
+	assert.Equal(t, int64(0), counterTotal(t, seen, "url.expiry.failures"), "a lost race is not a failure")
 }
 
 func TestJob_ANonLeaderExpiresNothingAndAsksAgain(t *testing.T) {
@@ -199,6 +240,7 @@ func TestJob_ReportsTheExpiredCountTheBacklogAndTheLastRun(t *testing.T) {
 	h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t), activeUrl(t)}, nil)
 	h.urls.EXPECT().FetchExpiredActive(gomock.Any(), t0, 2).Return([]url.URL{activeUrl(t)}, nil)
 	h.updated(3)
+	h.backlog(42)
 	var seen metricdata.ResourceMetrics
 	h.job.sleep = func(ctx context.Context, d time.Duration) { // sample while still the leader
 		require.NoError(t, h.reader.Collect(ctx, &seen))
@@ -210,7 +252,7 @@ func TestJob_ReportsTheExpiredCountTheBacklogAndTheLastRun(t *testing.T) {
 	assert.Equal(t, int64(2), counterTotal(t, seen, "url.expiry.expired"))
 	assert.Equal(t, int64(1), counterTotal(t, seen, "url.expiry.failures"))
 	assert.Equal(t, 1.0, gaugeValue(t, seen, "url.expiry.leader"))
-	assert.Equal(t, 1.0, gaugeValue(t, seen, "url.expiry.backlog"), "the URL that could not be expired is still waiting")
+	assert.Equal(t, 42.0, gaugeValue(t, seen, "url.expiry.backlog"), "the true queue depth, measured at the end of the run")
 	assert.Equal(t, float64(t0.Unix()), gaugeValue(t, seen, "url.expiry.last_run"))
 }
 

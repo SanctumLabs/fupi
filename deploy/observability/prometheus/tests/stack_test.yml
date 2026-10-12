@@ -164,7 +164,7 @@ tests:
         alertname: UrlExpiryBacklog
         exp_alerts:
           - exp_labels: {severity: warning}
-            exp_annotations: {summary: "URLs past their expiry have stayed ACTIVE for 15 minutes because the expiry job cannot update them"}
+            exp_annotations: {summary: "URLs past their expiry have stayed ACTIVE for 15 minutes; the expiry job is behind or cannot update them"}
 
   - name: An empty expiry backlog does not alert
     interval: 1m

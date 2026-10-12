@@ -143,18 +143,21 @@ SET
   expires_on = $2,
   deleted_at = CASE WHEN $1::url_status = 'DELETED' THEN COALESCE(deleted_at, NOW()) END,
   updated_at = NOW()
-WHERE id = $3 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
+WHERE id = $3
+  AND ($4::timestamptz IS NULL OR updated_at = $4::timestamptz) RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
 `
 
 type QueryUpdateUrlParams struct {
-	Status    UrlStatus          `db:"status" json:"status"`
-	ExpiresOn pgtype.Timestamptz `db:"expires_on" json:"expires_on"`
-	ID        pgtype.UUID        `db:"id" json:"id"`
+	Status            UrlStatus          `db:"status" json:"status"`
+	ExpiresOn         pgtype.Timestamptz `db:"expires_on" json:"expires_on"`
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	ExpectedUpdatedAt pgtype.Timestamptz `db:"expected_updated_at" json:"expected_updated_at"`
 }
 
 // Persists the state the URL aggregate owns after a transition. deleted_at follows the status, so
 // the DELETED transition releases the target for reuse (idx_urls_original_url is partial on
-// deleted_at IS NULL) and no other status can leave a stale deleted_at behind.
+// deleted_at IS NULL) and no other status can leave a stale deleted_at behind. When expected_updated_at is set the
+// update applies only if the row still has that updated_at (optimistic concurrency); no row comes back otherwise.
 //
 //	UPDATE urls
 //	SET
@@ -162,9 +165,10 @@ type QueryUpdateUrlParams struct {
 //	  expires_on = $2,
 //	  deleted_at = CASE WHEN $1::url_status = 'DELETED' THEN COALESCE(deleted_at, NOW()) END,
 //	  updated_at = NOW()
-//	WHERE id = $3 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
+//	WHERE id = $3
+//	  AND ($4::timestamptz IS NULL OR updated_at = $4::timestamptz) RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
 func (q *Queries) QueryUpdateUrl(ctx context.Context, arg QueryUpdateUrlParams) (Url, error) {
-	row := q.db.QueryRow(ctx, queryUpdateUrl, arg.Status, arg.ExpiresOn, arg.ID)
+	row := q.db.QueryRow(ctx, queryUpdateUrl, arg.Status, arg.ExpiresOn, arg.ID, arg.ExpectedUpdatedAt)
 	var i Url
 	err := row.Scan(
 		&i.ID,

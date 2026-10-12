@@ -272,6 +272,22 @@ func (repo *urlReadDatastoreAdapter) FetchExpiredActive(ctx context.Context, bef
 		})
 }
 
+// CountExpiredActive counts the ACTIVE URLs whose expiry has already passed: what FetchExpiredActive would drain.
+func (repo *urlReadDatastoreAdapter) CountExpiredActive(ctx context.Context, before time.Time) (int64, error) {
+	operation := "CountExpiredActive"
+	handlerLogPrefix := fmt.Sprintf("%s<%s>", repo.logPrefix, operation)
+
+	return postgresrepo.Execute(ctx, repo.config, fmt.Sprintf("%s.%s", repo.logPrefix, operation), repo.withTx,
+		func(ctx context.Context, qtx postgresrepo.UrlReadQuerier) (int64, error) {
+			count, queryErr := qtx.QueryCountExpiredActiveUrls(ctx, pgtype.Timestamptz{Time: before, Valid: !before.IsZero()})
+			if queryErr != nil {
+				slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to count expired active URLs", handlerLogPrefix), "before", before, "error", queryErr)
+				return 0, errdefs.BadRequest(queryErr)
+			}
+			return count, nil
+		})
+}
+
 // fetchMany runs a paginated URLs query and maps every row, returning the page and the total count.
 // query reports the rows alongside the window's total so each caller can supply its own SQL.
 func (repo *urlReadDatastoreAdapter) fetchMany(

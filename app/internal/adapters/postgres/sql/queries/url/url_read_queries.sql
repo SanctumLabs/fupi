@@ -26,6 +26,14 @@ WHERE u.status = 'ACTIVE'
 ORDER BY u.expires_on ASC
 LIMIT sqlc.arg(limit_by);
 
+-- name: QueryCountExpiredActiveUrls :one
+SELECT
+  COUNT(*)
+FROM urls u
+WHERE u.status = 'ACTIVE'
+  AND u.deleted_at IS NULL
+  AND u.expires_on < sqlc.arg(expires_before);
+
 -- name: QueryAllUrls :many
 SELECT
   sqlc.embed(u),

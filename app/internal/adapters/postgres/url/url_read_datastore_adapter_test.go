@@ -409,6 +409,31 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchExpiredActive_QueryError
 	suite.Empty(actual)
 }
 
+func (suite *UrlReadDatastoreAdapterTestSuite) TestCountExpiredActive_ReturnsTheCount() {
+	before := time.Now()
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryCountExpiredActiveUrls(gomock.Any(), gomock.Cond(func(p pgtype.Timestamptz) bool { return p.Valid && p.Time.Equal(before) })).
+		Return(int64(7), nil).
+		Times(1)
+
+	actual, err := suite.urlReadDatastoreAdapter.CountExpiredActive(context.Background(), before)
+	suite.NoError(err)
+	suite.Equal(int64(7), actual)
+}
+
+func (suite *UrlReadDatastoreAdapterTestSuite) TestCountExpiredActive_QueryError() {
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryCountExpiredActiveUrls(gomock.Any(), gomock.Any()).
+		Return(int64(0), errors.New("boom")).
+		Times(1)
+
+	actual, err := suite.urlReadDatastoreAdapter.CountExpiredActive(context.Background(), time.Now())
+	suite.Error(err)
+	suite.Zero(actual)
+}
+
 // TestFetchByOriginalUrl_NormalizesLookup matters because original_url is stored canonically: a
 // caller passing a trailing slash, an uppercase host or a utm parameter must still find the row.
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByOriginalUrl_NormalizesLookup() {

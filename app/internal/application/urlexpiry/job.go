@@ -12,6 +12,7 @@ import (
 
 	"github.com/sanctumlabs/fupi/app/internal/domain/url"
 	"github.com/sanctumlabs/fupi/app/internal/ports"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -124,36 +125,54 @@ func (j *Job) lead(ctx context.Context, lease ports.Lease) {
 	}
 }
 
-// drain expires the URLs that are past their expiry as of now, a batch at a time. It stops when a batch is short (the
-// backlog is empty), when a full batch made no progress (the same rows would come back; the next run retries them) or
-// when a fetch fails.
+// drain expires the URLs that are past their expiry as of now, a batch at a time, then measures what is left. A run
+// stops when a batch is short (the backlog is empty), when a full batch made no progress (the same rows would come back;
+// the next run retries them) or when a fetch fails.
 func (j *Job) drain(ctx context.Context) {
 	before := j.now()
+	j.expireBatches(ctx, before)
+	if ctx.Err() == nil {
+		j.sampleBacklog(ctx, before)
+	}
+}
+
+func (j *Job) expireBatches(ctx context.Context, before time.Time) {
 	for ctx.Err() == nil {
 		batch, err := j.urls.FetchExpiredActive(telemetry.Unsampled(ctx), before, j.cfg.BatchSize)
 		if err != nil {
 			slog.WarnContext(ctx, "url expiry: cannot fetch the expired urls", "error", err)
 			return
 		}
-		expired := 0
+		handled := 0
 		for _, u := range batch {
 			if ctx.Err() != nil {
 				break
 			}
 			if j.expire(ctx, u) {
-				expired++
+				handled++
 			}
 		}
-		j.metrics.backlog.Store(int64(len(batch) - expired))
 		j.metrics.lastRun.Store(before.Unix())
-		if len(batch) < j.cfg.BatchSize || expired == 0 {
+		if len(batch) < j.cfg.BatchSize || handled == 0 {
 			return
 		}
 	}
 }
 
+// sampleBacklog counts the URLs still past their expiry, however many batches that is.
+func (j *Job) sampleBacklog(ctx context.Context, before time.Time) {
+	backlog, err := j.urls.CountExpiredActive(telemetry.Unsampled(ctx), before)
+	if err != nil {
+		slog.WarnContext(ctx, "url expiry: cannot count the expired urls", "error", err)
+		return
+	}
+	j.metrics.backlog.Store(backlog)
+}
+
 // expire moves one URL to EXPIRED. Update writes the status and url.expired to the outbox in one transaction, so a URL
-// that fails is skipped and the others are not held back. It reports whether the URL was expired.
+// that fails is skipped and the others are not held back. It reports whether the URL needs no retry: it was expired, or
+// another writer changed it since it was loaded (a Conflict: it was suspended or its expiry moved), in which case the
+// job leaves it alone and a later run sees its new state.
 func (j *Job) expire(ctx context.Context, u url.URL) bool {
 	if err := u.MarkExpired(); err != nil {
 		slog.WarnContext(ctx, "url expiry: cannot expire a url", "url_id", u.ID(), "error", err)
@@ -161,6 +180,10 @@ func (j *Job) expire(ctx context.Context, u url.URL) bool {
 		return false
 	}
 	if _, err := j.urls.Update(ctx, u); err != nil {
+		if errdefs.IsConflict(err) {
+			slog.InfoContext(ctx, "url expiry: a url changed since it was loaded, leaving it alone", "url_id", u.ID())
+			return true
+		}
 		slog.WarnContext(ctx, "url expiry: cannot save an expired url", "url_id", u.ID(), "error", err)
 		j.metrics.failures.Add(ctx, 1)
 		return false
