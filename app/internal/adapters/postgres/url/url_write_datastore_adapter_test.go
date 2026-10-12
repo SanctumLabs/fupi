@@ -140,15 +140,67 @@ func (suite *UrlWriteDatastoreAdapterTestSuite) TestCreate_FailsWhenKeywordCanno
 	suite.Empty(actual)
 }
 
-// TestUnimplementedWrites_ReportNotImplemented tests that writes which are not built yet fail
-// loudly instead of reporting success or panicking. Deleting a URL goes through Update with the
-// aggregate's DELETED status, so these two have no caller.
-func (suite *UrlWriteDatastoreAdapterTestSuite) TestUnimplementedWrites_ReportNotImplemented() {
-	ctx := context.Background()
-	id := entity.NewID().String()
+// TestSoftDelete_MarksTheAggregateDeletedAndPersistsIt asserts the row is loaded with its keywords, transitioned through
+// MarkDeleted and written exactly as Update writes it, with url.deleted in the outbox.
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestSoftDelete_MarksTheAggregateDeletedAndPersistsIt() {
+	mockUrl, mockUrlErr := urlmock.MockUrl(urlmock.WithExpiresOn(time.Now().Add(time.Hour * 24)))
+	suite.Require().NoError(mockUrlErr)
 
-	suite.True(errdefs.IsNotImplemented(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, id)))
-	suite.True(errdefs.IsNotImplemented(suite.urlWriteDatastoreAdapter.Delete(ctx, id)))
+	urlID := pgtype.UUID{Bytes: mockUrl.ID(), Valid: true}
+	row := mockpostgresql.MockUrl(mockpostgresql.WithUrl(*mockUrl))
+	row.ID = urlID
+	deletedRow := row
+	deletedRow.Status = postgresql.UrlStatusDELETED
+
+	gomock.InOrder(
+		suite.mockUrlWriteQuerier.EXPECT().QueryUrlById(gomock.Any(), urlID).Return(postgresql.QueryUrlByIdRow{Url: row}, nil),
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryActiveKeywordsByUrlIds(gomock.Any(), []pgtype.UUID{urlID}).
+			Return([]postgresql.QueryActiveKeywordsByUrlIdsRow{{Keyword: postgresql.Keyword{UrlID: urlID, Value: "one"}}}, nil),
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryUpdateUrl(gomock.Any(), gomock.Cond(func(p postgresql.QueryUpdateUrlParams) bool {
+				return p.ID == urlID && p.Status == postgresql.UrlStatusDELETED
+			})).
+			Return(deletedRow, nil),
+		suite.mockUrlWriteQuerier.EXPECT().QueryDeleteKeywordsByUrlId(gomock.Any(), urlID).Return(nil),
+		suite.mockUrlWriteQuerier.EXPECT().QueryCreateKeyword(gomock.Any(), postgresql.QueryCreateKeywordParams{UrlID: urlID, Value: "one"}),
+		suite.mockUrlWriteQuerier.EXPECT().
+			QueryCreateOutboxEvent(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, params postgresql.QueryCreateOutboxEventParams) (postgresql.OutboxEvent, error) {
+				suite.Equal("url.deleted", params.EventType)
+				suite.Equal("url.events", params.Destination)
+				return postgresql.OutboxEvent{}, nil
+			}),
+	)
+
+	suite.Require().NoError(suite.urlWriteDatastoreAdapter.SoftDelete(context.Background(), entity.IDToString(mockUrl.ID())))
+}
+
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestSoftDelete_MissingUrlIsNotFound() {
+	suite.mockUrlWriteQuerier.EXPECT().
+		QueryUrlById(gomock.Any(), gomock.Any()).
+		Return(postgresql.QueryUrlByIdRow{}, pgx.ErrNoRows)
+
+	err := suite.urlWriteDatastoreAdapter.SoftDelete(context.Background(), entity.NewID().String())
+	suite.True(errdefs.IsNotFound(err), "expected NotFound, got %v", err)
+}
+
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestSoftDelete_MalformedIdIsNotFound() {
+	err := suite.urlWriteDatastoreAdapter.SoftDelete(context.Background(), "not-a-uuid")
+	suite.True(errdefs.IsNotFound(err), "expected NotFound, got %v", err)
+}
+
+func (suite *UrlWriteDatastoreAdapterTestSuite) TestSoftDelete_AlreadyDeletedIsConflictAndWritesNothing() {
+	mockUrl, mockUrlErr := urlmock.MockUrl(urlmock.WithExpiresOn(time.Now().Add(time.Hour * 24)))
+	suite.Require().NoError(mockUrlErr)
+	row := mockpostgresql.MockUrl(mockpostgresql.WithUrl(*mockUrl), mockpostgresql.WithStatus(postgresql.UrlStatusDELETED))
+	row.ID = pgtype.UUID{Bytes: mockUrl.ID(), Valid: true}
+
+	suite.mockUrlWriteQuerier.EXPECT().QueryUrlById(gomock.Any(), gomock.Any()).Return(postgresql.QueryUrlByIdRow{Url: row}, nil)
+	suite.mockUrlWriteQuerier.EXPECT().QueryActiveKeywordsByUrlIds(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+	err := suite.urlWriteDatastoreAdapter.SoftDelete(context.Background(), entity.IDToString(mockUrl.ID()))
+	suite.True(errdefs.IsConflict(err), "expected Conflict, got %v", err)
 }
 
 // TestSave_WritesRecordedEventsToTheOutbox asserts URLCreated is written in the same transaction as the url.

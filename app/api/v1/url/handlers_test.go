@@ -296,11 +296,30 @@ func (suite *UrlHandlersTestSuite) TestDelete_Returns204() {
 	owned := suite.ownedUrl()
 	id := entity.IDToString(owned.ID())
 	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(owned, nil)
-	suite.mockUrls.EXPECT().Update(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, u url.URL) (url.URL, error) { return u, nil })
+	suite.mockUrls.EXPECT().SoftDelete(gomock.Any(), id).Return(nil)
 
 	status, _, _ := suite.do("DELETE", baseURI+"/urls/"+id, "")
 
 	suite.Equal(fiber.StatusNoContent, status)
+}
+
+// TestDelete_MapsDatastoreNotFoundAndConflictTo404And409 covers a url that vanishes or is deleted by another request
+// between the ownership check and the soft delete.
+func (suite *UrlHandlersTestSuite) TestDelete_MapsDatastoreNotFoundAndConflictTo404And409() {
+	cases := map[int]error{
+		fiber.StatusNotFound: errdefs.NotFound(errors.New("gone")),
+		fiber.StatusConflict: errdefs.Conflict(errdefs.ErrInvalidStatusTransition),
+	}
+	for expected, deleteErr := range cases {
+		owned := suite.ownedUrl()
+		id := entity.IDToString(owned.ID())
+		suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(owned, nil)
+		suite.mockUrls.EXPECT().SoftDelete(gomock.Any(), id).Return(deleteErr)
+
+		status, _, _ := suite.do("DELETE", baseURI+"/urls/"+id, "")
+
+		suite.Equal(expected, status)
+	}
 }
 
 // --- GET /:code -------------------------------------------------------------------------------

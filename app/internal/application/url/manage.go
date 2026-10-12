@@ -84,18 +84,13 @@ func (svc *Service) Delete(ctx context.Context, userID, id string) (err error) {
 
 	handlerLogPrefix := fmt.Sprintf("%s<Delete>", svc.logPrefix)
 
-	owned, fetchErr := svc.fetchOwned(ctx, userID, id)
-	if fetchErr != nil {
+	if _, fetchErr := svc.fetchOwned(ctx, userID, id); fetchErr != nil {
 		return fetchErr
 	}
 
-	if deleteErr := owned.MarkDeleted(); deleteErr != nil {
-		return classifyDomainError(deleteErr)
-	}
-
-	if _, updateErr := svc.urls.Update(ctx, owned); updateErr != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to delete url", handlerLogPrefix), "url_id", id, "error", updateErr)
-		return updateErr
+	if deleteErr := svc.urls.SoftDelete(ctx, id); deleteErr != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to delete url", handlerLogPrefix), "url_id", id, "error", deleteErr)
+		return deleteErr
 	}
 
 	slog.InfoContext(ctx, fmt.Sprintf("%s Deleted url", handlerLogPrefix), "url_id", id)

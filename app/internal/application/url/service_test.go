@@ -329,20 +329,26 @@ func (suite *UrlServiceTestSuite) TestUpdate_RejectionsAreClassified() {
 
 // --- Delete -----------------------------------------------------------------------------------
 
-func (suite *UrlServiceTestSuite) TestDelete_PersistsTheDeletedStatusAndEvent() {
+func (suite *UrlServiceTestSuite) TestDelete_SoftDeletesTheOwnedUrl() {
 	owned := suite.ownedUrl()
 	id := entity.IDToString(owned.ID())
 
 	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(owned, nil)
-	suite.mockUrls.EXPECT().
-		Update(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, u url.URL) (url.URL, error) {
-			suite.Equal(url.URLStatusDeleted, u.Status())
-			suite.Equal([]string{"url.deleted"}, eventTypes(u))
-			return u, nil
-		})
+	suite.mockUrls.EXPECT().SoftDelete(gomock.Any(), id).Return(nil)
 
 	suite.Require().NoError(suite.service.Delete(context.Background(), suite.userID, id))
+}
+
+func (suite *UrlServiceTestSuite) TestDelete_PropagatesTheDatastoreError() {
+	owned := suite.ownedUrl()
+	id := entity.IDToString(owned.ID())
+
+	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(owned, nil)
+	suite.mockUrls.EXPECT().SoftDelete(gomock.Any(), id).Return(errdefs.Conflict(errdefs.ErrInvalidStatusTransition))
+
+	err := suite.service.Delete(context.Background(), suite.userID, id)
+
+	suite.True(errdefs.IsConflict(err))
 }
 
 func (suite *UrlServiceTestSuite) TestDelete_AnotherUsersUrlIsNotFoundAndUntouched() {

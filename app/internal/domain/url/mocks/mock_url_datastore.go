@@ -44,20 +44,6 @@ func (m *MockUrlDatastore) EXPECT() *MockUrlDatastoreMockRecorder {
 	return m.recorder
 }
 
-// Delete mocks base method.
-func (m *MockUrlDatastore) Delete(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Delete indicates an expected call of Delete.
-func (mr *MockUrlDatastoreMockRecorder) Delete(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockUrlDatastore)(nil).Delete), ctx, id)
-}
-
 // FetchAll mocks base method.
 func (m *MockUrlDatastore) FetchAll(ctx context.Context, params common.RequestParams) (repository.FetchRecordsResponse[url.URL], error) {
 	m.ctrl.T.Helper()
@@ -244,20 +230,6 @@ func NewMockUrlWriteDatastore(ctrl *gomock.Controller) *MockUrlWriteDatastore {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockUrlWriteDatastore) EXPECT() *MockUrlWriteDatastoreMockRecorder {
 	return m.recorder
-}
-
-// Delete mocks base method.
-func (m *MockUrlWriteDatastore) Delete(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Delete indicates an expected call of Delete.
-func (mr *MockUrlWriteDatastoreMockRecorder) Delete(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockUrlWriteDatastore)(nil).Delete), ctx, id)
 }
 
 // Save mocks base method.

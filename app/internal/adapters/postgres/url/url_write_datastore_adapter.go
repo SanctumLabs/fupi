@@ -125,37 +125,43 @@ func (repo *urlWriteDatastoreAdapter) Update(ctx context.Context, urlEntity url.
 	slog.InfoContext(ctx, fmt.Sprintf("%s Updating URL", handlerLogPrefix), "url_id", urlEntity.ID(), "status", urlEntity.Status())
 
 	return postgresrepo.Execute(ctx, repo.config, fmt.Sprintf("%s.Update", repo.logPrefix), repo.withTx, func(retryCtx context.Context, qtx postgresrepo.UrlWriteQuerier) (url.URL, error) {
-		urlID := pgtype.UUID{Bytes: urlEntity.ID(), Valid: true}
-
-		updatedUrl, updateErr := qtx.QueryUpdateUrl(retryCtx, postgresql.QueryUpdateUrlParams{
-			ID:        urlID,
-			Status:    postgresql.UrlStatus(urlEntity.Status()),
-			ExpiresOn: pgtype.Timestamptz{Time: urlEntity.ExpiresOn(), Valid: !urlEntity.ExpiresOn().IsZero()},
-		})
-		if updateErr != nil {
-			slog.ErrorContext(retryCtx, fmt.Sprintf("%s Failed to update URL", handlerLogPrefix), "url_id", urlEntity.ID(), "error", updateErr)
-			if errors.Is(updateErr, pgx.ErrNoRows) {
-				return url.URL{}, errdefs.NotFound(updateErr)
-			}
-			return url.URL{}, fmt.Errorf("failed to update URL %s: %w", urlEntity.ID(), updateErr)
-		}
-
-		if deleteErr := qtx.QueryDeleteKeywordsByUrlId(retryCtx, urlID); deleteErr != nil {
-			slog.ErrorContext(retryCtx, fmt.Sprintf("%s Failed to clear URL keywords", handlerLogPrefix), "url_id", urlEntity.ID(), "error", deleteErr)
-			return url.URL{}, fmt.Errorf("failed to clear keywords of URL %s: %w", urlEntity.ID(), deleteErr)
-		}
-
-		keywords, keywordsErr := createKeywords(retryCtx, handlerLogPrefix, qtx, urlID, urlEntity.Keywords())
-		if keywordsErr != nil {
-			return url.URL{}, keywordsErr
-		}
-
-		if outboxErr := writeEvents(retryCtx, qtx, urlEntity); outboxErr != nil {
-			return url.URL{}, outboxErr
-		}
-
-		return mapUrl(retryCtx, handlerLogPrefix, updatedUrl, keywords)
+		return persistUpdate(retryCtx, handlerLogPrefix, qtx, urlEntity)
 	})
+}
+
+// persistUpdate writes the aggregate's status, expiry and keywords and its recorded events, in the caller's
+// transaction. It is shared by Update and SoftDelete so both paths persist a change identically.
+func persistUpdate(ctx context.Context, handlerLogPrefix string, qtx postgresrepo.UrlWriteQuerier, urlEntity url.URL) (url.URL, error) {
+	urlID := pgtype.UUID{Bytes: urlEntity.ID(), Valid: true}
+
+	updatedUrl, updateErr := qtx.QueryUpdateUrl(ctx, postgresql.QueryUpdateUrlParams{
+		ID:        urlID,
+		Status:    postgresql.UrlStatus(urlEntity.Status()),
+		ExpiresOn: pgtype.Timestamptz{Time: urlEntity.ExpiresOn(), Valid: !urlEntity.ExpiresOn().IsZero()},
+	})
+	if updateErr != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to update URL", handlerLogPrefix), "url_id", urlEntity.ID(), "error", updateErr)
+		if errors.Is(updateErr, pgx.ErrNoRows) {
+			return url.URL{}, errdefs.NotFound(updateErr)
+		}
+		return url.URL{}, fmt.Errorf("failed to update URL %s: %w", urlEntity.ID(), updateErr)
+	}
+
+	if deleteErr := qtx.QueryDeleteKeywordsByUrlId(ctx, urlID); deleteErr != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("%s Failed to clear URL keywords", handlerLogPrefix), "url_id", urlEntity.ID(), "error", deleteErr)
+		return url.URL{}, fmt.Errorf("failed to clear keywords of URL %s: %w", urlEntity.ID(), deleteErr)
+	}
+
+	keywords, keywordsErr := createKeywords(ctx, handlerLogPrefix, qtx, urlID, urlEntity.Keywords())
+	if keywordsErr != nil {
+		return url.URL{}, keywordsErr
+	}
+
+	if outboxErr := writeEvents(ctx, qtx, urlEntity); outboxErr != nil {
+		return url.URL{}, outboxErr
+	}
+
+	return mapUrl(ctx, handlerLogPrefix, updatedUrl, keywords)
 }
 
 // urlEventsDestination is where the URL context's domain events are published once relayed from the outbox.
@@ -203,12 +209,49 @@ func mapUrl(ctx context.Context, handlerLogPrefix string, urlModel postgresql.Ur
 	return mappedUrl, nil
 }
 
-// SoftDelete is not implemented yet.
+// SoftDelete marks the URL deleted through the aggregate, so status, deleted_at and the url.deleted event stay
+// consistent with the use-case path. It loads the URL and persists the transition in one transaction. An unknown id is
+// NotFound; a URL that is already DELETED is a Conflict (ErrInvalidStatusTransition).
 func (repo *urlWriteDatastoreAdapter) SoftDelete(ctx context.Context, id string) error {
-	return errdefs.NotImplemented(errors.New("url soft delete is not implemented"))
-}
+	handlerLogPrefix := fmt.Sprintf("%s<SoftDelete>", repo.logPrefix)
+	slog.InfoContext(ctx, fmt.Sprintf("%s Soft deleting URL", handlerLogPrefix), "url_id", id)
 
-// Delete is not implemented yet.
-func (repo *urlWriteDatastoreAdapter) Delete(ctx context.Context, id string) error {
-	return errdefs.NotImplemented(errors.New("url delete is not implemented"))
+	urlUUID, urlUUIDErr := postgres.StringToUUID(id)
+	if urlUUIDErr != nil {
+		return errdefs.NotFound(fmt.Errorf("url %q: %w", id, urlUUIDErr))
+	}
+
+	_, err := postgresrepo.Execute(ctx, repo.config, fmt.Sprintf("%s.SoftDelete", repo.logPrefix), repo.withTx, func(retryCtx context.Context, qtx postgresrepo.UrlWriteQuerier) (url.URL, error) {
+		row, rowErr := qtx.QueryUrlById(retryCtx, urlUUID)
+		if rowErr != nil {
+			if errors.Is(rowErr, pgx.ErrNoRows) {
+				return url.URL{}, errdefs.NotFound(fmt.Errorf("url %q: %w", id, rowErr))
+			}
+			return url.URL{}, fmt.Errorf("failed to load URL %s: %w", id, rowErr)
+		}
+
+		keywordRows, keywordsErr := qtx.QueryActiveKeywordsByUrlIds(retryCtx, []pgtype.UUID{urlUUID})
+		if keywordsErr != nil {
+			return url.URL{}, fmt.Errorf("failed to load keywords of URL %s: %w", id, keywordsErr)
+		}
+		keywords := make([]string, 0, len(keywordRows))
+		for _, keywordRow := range keywordRows {
+			keywords = append(keywords, keywordRow.Keyword.Value)
+		}
+
+		urlEntity, mapErr := MapUrlModelToEntity(row.Url, keywords)
+		if mapErr != nil {
+			return url.URL{}, fmt.Errorf("failed to map URL model to entity: %w", mapErr)
+		}
+
+		if deleteErr := urlEntity.MarkDeleted(); deleteErr != nil {
+			if errors.Is(deleteErr, errdefs.ErrInvalidStatusTransition) {
+				return url.URL{}, errdefs.Conflict(deleteErr)
+			}
+			return url.URL{}, deleteErr
+		}
+
+		return persistUpdate(retryCtx, handlerLogPrefix, qtx, urlEntity)
+	})
+	return err
 }

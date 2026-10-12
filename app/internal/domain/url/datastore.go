@@ -16,9 +16,19 @@ type (
 		UrlWriteDatastore
 	}
 
-	// UrlWriteDatastore defines the interface for writing URL entities to an underlying storage implementation
+	// UrlWriteDatastore defines the interface for writing URL entities to an underlying storage implementation.
+	// It deliberately omits the hard Delete of repository.WriteRepositoryPort: nothing in the product purges a URL
+	// (see ADR-0021).
 	UrlWriteDatastore interface {
-		repository.WriteRepositoryPort[URL]
+		// Save creates a URL and writes the events it recorded to the outbox
+		Save(ctx context.Context, request URL) (URL, error)
+
+		// Update persists the status, expiry and keywords of a URL, with the events it recorded
+		Update(ctx context.Context, request URL) (URL, error)
+
+		// SoftDelete marks the URL with the given id deleted through the aggregate, recording url.deleted. An unknown
+		// id is NotFound and an already deleted URL a Conflict.
+		SoftDelete(ctx context.Context, id string) error
 	}
 
 	// UrlReadDatastore defines the interface for reading URL entities from an underlying storage implementation

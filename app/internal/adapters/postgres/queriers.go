@@ -17,6 +17,8 @@ type (
 		QueryUpdateUrl(ctx context.Context, params postgresql.QueryUpdateUrlParams) (postgresql.Url, error)
 		QueryCreateKeyword(ctx context.Context, params postgresql.QueryCreateKeywordParams) (postgresql.Keyword, error)
 		QueryDeleteKeywordsByUrlId(ctx context.Context, urlID pgtype.UUID) error
+		QueryUrlById(ctx context.Context, id pgtype.UUID) (postgresql.QueryUrlByIdRow, error)
+		QueryActiveKeywordsByUrlIds(ctx context.Context, urlIds []pgtype.UUID) ([]postgresql.QueryActiveKeywordsByUrlIdsRow, error)
 	}
 
 	// UrlReadQuerier defines the subset of SQL operations needed for URL reads.

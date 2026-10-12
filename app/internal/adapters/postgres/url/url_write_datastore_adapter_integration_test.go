@@ -8,6 +8,7 @@ import (
 	"time"
 
 	identitydatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/identity"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
 	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
 	mockidentity "github.com/sanctumlabs/fupi/app/internal/domain/identity/mocks"
 	domainurl "github.com/sanctumlabs/fupi/app/internal/domain/url"
@@ -244,6 +245,50 @@ func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestUpdate_DeletingRe
 
 	_, reshortenErr := suite.saveUrlForNewUser(ctx, urlmock.WithOriginalUrl("https://example.com/released-target"))
 	suite.NoError(reshortenErr, "a deleted url must release its target")
+}
+
+// TestSoftDelete_MarksDeletedWritesTheEventAndReleasesTheTarget asserts status, deleted_at and url.deleted land
+// together, and that the target can be shortened again.
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestSoftDelete_MarksDeletedWritesTheEventAndReleasesTheTarget() {
+	ctx, cancel := context.WithTimeout(context.Background(), suite.config.OperationTimeout)
+	defer cancel()
+
+	saved, saveErr := suite.saveUrlForNewUser(ctx,
+		urlmock.WithOriginalUrl("https://example.com/soft-deleted-target"),
+		urlmock.WithKeywords([]string{"first"}),
+	)
+	suite.Require().NoError(saveErr)
+	id := saved.ID().String()
+
+	suite.Require().NoError(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, id))
+
+	var status string
+	var deletedAtSet bool
+	suite.Require().NoError(suite.testPostgresDatabaseClient.GetDB().QueryRow(ctx,
+		`SELECT status::text, deleted_at IS NOT NULL FROM urls WHERE id = $1`, id).Scan(&status, &deletedAtSet))
+	suite.Equal("DELETED", status)
+	suite.True(deletedAtSet)
+
+	var events int
+	suite.Require().NoError(suite.testPostgresDatabaseClient.GetDB().QueryRow(ctx,
+		`SELECT count(*) FROM outbox_events WHERE event_type = 'url.deleted' AND partition_key = $1`, id).Scan(&events))
+	suite.Equal(1, events)
+
+	_, reshortenErr := suite.saveUrlForNewUser(ctx, urlmock.WithOriginalUrl("https://example.com/soft-deleted-target"))
+	suite.NoError(reshortenErr, "a deleted url must release its target")
+}
+
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestSoftDelete_MissingIsNotFoundAndRepeatedIsConflict() {
+	ctx, cancel := context.WithTimeout(context.Background(), suite.config.OperationTimeout)
+	defer cancel()
+
+	suite.True(errdefs.IsNotFound(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, entity.NewID().String())))
+
+	saved, saveErr := suite.saveUrlForNewUser(ctx)
+	suite.Require().NoError(saveErr)
+	suite.Require().NoError(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, saved.ID().String()))
+
+	suite.True(errdefs.IsConflict(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, saved.ID().String())))
 }
 
 func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestUpdate_ChangesTheExpiry() {
