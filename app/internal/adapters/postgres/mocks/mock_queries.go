@@ -101,6 +101,21 @@ func (mr *MockUrlWriteQuerierMockRecorder) QueryDeleteKeywordsByUrlId(ctx, urlID
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDeleteKeywordsByUrlId", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryDeleteKeywordsByUrlId), ctx, urlID)
 }
 
+// QueryDeleteUrlWithId mocks base method.
+func (m *MockUrlWriteQuerier) QueryDeleteUrlWithId(ctx context.Context, id pgtype.UUID) (postgresql.Url, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryDeleteUrlWithId", ctx, id)
+	ret0, _ := ret[0].(postgresql.Url)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryDeleteUrlWithId indicates an expected call of QueryDeleteUrlWithId.
+func (mr *MockUrlWriteQuerierMockRecorder) QueryDeleteUrlWithId(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDeleteUrlWithId", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryDeleteUrlWithId), ctx, id)
+}
+
 // QueryUpdateUrl mocks base method.
 func (m *MockUrlWriteQuerier) QueryUpdateUrl(ctx context.Context, params postgresql.QueryUpdateUrlParams) (postgresql.Url, error) {
 	m.ctrl.T.Helper()
@@ -114,6 +129,21 @@ func (m *MockUrlWriteQuerier) QueryUpdateUrl(ctx context.Context, params postgre
 func (mr *MockUrlWriteQuerierMockRecorder) QueryUpdateUrl(ctx, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryUpdateUrl", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryUpdateUrl), ctx, params)
+}
+
+// QueryUrlByIdForUpdate mocks base method.
+func (m *MockUrlWriteQuerier) QueryUrlByIdForUpdate(ctx context.Context, id pgtype.UUID) (postgresql.Url, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryUrlByIdForUpdate", ctx, id)
+	ret0, _ := ret[0].(postgresql.Url)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryUrlByIdForUpdate indicates an expected call of QueryUrlByIdForUpdate.
+func (mr *MockUrlWriteQuerierMockRecorder) QueryUrlByIdForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryUrlByIdForUpdate", reflect.TypeOf((*MockUrlWriteQuerier)(nil).QueryUrlByIdForUpdate), ctx, id)
 }
 
 // MockUrlReadQuerier is a mock of UrlReadQuerier interface.

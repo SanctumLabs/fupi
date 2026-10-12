@@ -238,6 +238,24 @@ func TestURL_StatusTransitions(t *testing.T) {
 	})
 }
 
+func TestURL_Purge(t *testing.T) {
+	for _, status := range []URLStatus{URLStatusActive, URLStatusExpired, URLStatusSuspended, URLStatusDeleted} {
+		u := urlWithStatus(t, status)
+		u.Purge()
+
+		purged, ok := lastEvent(t, u).(URLPurged)
+		if !ok {
+			t.Fatalf("%s: event is %T, want URLPurged", status, lastEvent(t, u))
+		}
+		if purged.EventType() != "url.purged" || purged.URLID != entity.IDToString(u.ID()) || purged.ShortCode != u.ShortCode().Value() {
+			t.Errorf("%s: unexpected URLPurged payload: %+v", status, purged)
+		}
+		if u.Status() != status {
+			t.Errorf("Purge changed the status from %s to %s", status, u.Status())
+		}
+	}
+}
+
 func TestURL_UpdateExpiry(t *testing.T) {
 	t.Run("extends expiry on ACTIVE url", func(t *testing.T) {
 		u := urlWithStatus(t, URLStatusActive)

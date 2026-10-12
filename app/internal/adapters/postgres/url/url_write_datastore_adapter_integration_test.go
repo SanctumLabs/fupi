@@ -262,3 +262,70 @@ func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestUpdate_ChangesThe
 	suite.Equal(domainurl.URLStatusActive, updated.Status())
 	suite.Nil(updated.DeletedAt())
 }
+
+// countRows runs a COUNT(*) query against the test database.
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) countRows(ctx context.Context, query string, args ...any) int {
+	var count int
+	suite.Require().NoError(suite.testPostgresDatabaseClient.GetDB().QueryRow(ctx, query, args...).Scan(&count))
+	return count
+}
+
+// outboxEvents counts the outbox events of one type recorded for a url.
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) outboxEvents(ctx context.Context, urlID, eventType string) int {
+	return suite.countRows(ctx, `SELECT COUNT(*) FROM outbox_events WHERE partition_key = $1 AND event_type = $2`, urlID, eventType)
+}
+
+// TestSoftDelete_MarksDeletedReleasesTheTargetAndRecordsOneEvent covers the soft delete end to end: status and
+// deleted_at are set together, the keywords stay, URLDeleted is in the outbox, the target can be shortened again, and a
+// second delete is a Conflict that records nothing.
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestSoftDelete_MarksDeletedReleasesTheTargetAndRecordsOneEvent() {
+	ctx, cancel := context.WithTimeout(context.Background(), suite.config.OperationTimeout)
+	defer cancel()
+
+	saved, saveErr := suite.saveUrlForNewUser(ctx,
+		urlmock.WithOriginalUrl("https://example.com/soft-deleted-target"),
+		urlmock.WithKeywords([]string{"kept"}),
+	)
+	suite.Require().NoError(saveErr)
+	id := saved.ID().String()
+
+	suite.Require().NoError(suite.urlWriteDatastoreAdapter.SoftDelete(ctx, id))
+
+	stored, fetchErr := NewUrlReadDatastoreAdapter(suite.testPostgresDatabaseClient, suite.config).FetchById(ctx, id)
+	suite.Require().NoError(fetchErr)
+	suite.Equal(domainurl.URLStatusDeleted, stored.Status())
+	suite.NotNil(stored.DeletedAt(), "the DELETED status must set deleted_at")
+	suite.Len(stored.Keywords(), 1, "a soft delete keeps the keywords")
+	suite.Equal(1, suite.outboxEvents(ctx, id, "url.deleted"))
+
+	_, reshortenErr := suite.saveUrlForNewUser(ctx, urlmock.WithOriginalUrl("https://example.com/soft-deleted-target"))
+	suite.NoError(reshortenErr, "a deleted url must release its target")
+
+	again := suite.urlWriteDatastoreAdapter.SoftDelete(ctx, id)
+	suite.True(errdefs.IsConflict(again), "deleting twice is a Conflict, got %v", again)
+	suite.Equal(1, suite.outboxEvents(ctx, id, "url.deleted"), "the second delete must not record another event")
+}
+
+// TestDelete_PurgesTheUrlWithItsKeywordsAndScans covers the hard delete: the row goes with its keywords and its scan
+// results (the ON DELETE CASCADE of migration 000004), and URLPurged stays in the outbox.
+func (suite *UrlWriteDatastoreAdapterIntegrationTestSuite) TestDelete_PurgesTheUrlWithItsKeywordsAndScans() {
+	ctx, cancel := context.WithTimeout(context.Background(), suite.config.OperationTimeout)
+	defer cancel()
+
+	saved, saveErr := suite.saveUrlForNewUser(ctx, urlmock.WithKeywords([]string{"gone"}))
+	suite.Require().NoError(saveErr)
+	id := saved.ID().String()
+
+	_, scanErr := suite.testPostgresDatabaseClient.GetDB().Exec(ctx,
+		`INSERT INTO url_scans (url_id, provider, result) VALUES ($1, 'google_safe_browsing', 'safe')`, id)
+	suite.Require().NoError(scanErr)
+
+	suite.Require().NoError(suite.urlWriteDatastoreAdapter.Delete(ctx, id))
+
+	suite.Zero(suite.countRows(ctx, `SELECT COUNT(*) FROM urls WHERE id = $1`, id))
+	suite.Zero(suite.countRows(ctx, `SELECT COUNT(*) FROM keywords WHERE url_id = $1`, id))
+	suite.Zero(suite.countRows(ctx, `SELECT COUNT(*) FROM url_scans WHERE url_id = $1`, id))
+	suite.Equal(1, suite.outboxEvents(ctx, id, "url.purged"))
+
+	suite.True(errdefs.IsNotFound(suite.urlWriteDatastoreAdapter.Delete(ctx, id)), "a purged url is gone")
+}

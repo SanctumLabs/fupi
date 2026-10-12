@@ -329,20 +329,27 @@ func (suite *UrlServiceTestSuite) TestUpdate_RejectionsAreClassified() {
 
 // --- Delete -----------------------------------------------------------------------------------
 
-func (suite *UrlServiceTestSuite) TestDelete_PersistsTheDeletedStatusAndEvent() {
+func (suite *UrlServiceTestSuite) TestDelete_SoftDeletesTheCallersUrl() {
 	owned := suite.ownedUrl()
 	id := entity.IDToString(owned.ID())
 
 	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(owned, nil)
-	suite.mockUrls.EXPECT().
-		Update(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, u url.URL) (url.URL, error) {
-			suite.Equal(url.URLStatusDeleted, u.Status())
-			suite.Equal([]string{"url.deleted"}, eventTypes(u))
-			return u, nil
-		})
+	suite.mockUrls.EXPECT().SoftDelete(gomock.Any(), id).Return(nil)
 
 	suite.Require().NoError(suite.service.Delete(context.Background(), suite.userID, id))
+}
+
+func (suite *UrlServiceTestSuite) TestDelete_ReturnsTheSoftDeleteFailure() {
+	owned := suite.ownedUrl()
+	id := entity.IDToString(owned.ID())
+	raced := errdefs.Conflict(errdefs.ErrInvalidStatusTransition)
+
+	suite.mockUrls.EXPECT().FetchById(gomock.Any(), id).Return(owned, nil)
+	suite.mockUrls.EXPECT().SoftDelete(gomock.Any(), id).Return(raced)
+
+	err := suite.service.Delete(context.Background(), suite.userID, id)
+
+	suite.True(errdefs.IsConflict(err), "a delete that lost a race is a Conflict, got %v", err)
 }
 
 func (suite *UrlServiceTestSuite) TestDelete_AnotherUsersUrlIsNotFoundAndUntouched() {
