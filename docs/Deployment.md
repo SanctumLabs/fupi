@@ -90,6 +90,8 @@ docker run -p 8086:8086 -e DATABASE_HOST=... -e DATABASE_NAME=... -e DATABASE_US
 | `OUTBOX_MAX_ATTEMPTS` | `3` | permanent rejections before an event is parked (at least 1) |
 | `OUTBOX_STANDBY_INTERVAL` | `5` | seconds between a standby's attempts to become the active relay |
 | `OUTBOX_RETENTION_DAYS` | `7` | days sent rows are kept; `0` keeps them forever |
+| `EXPIRY_INTERVAL` | `60` | seconds between runs of the URL expiry job (at least 1); one active instance, elected like the relay |
+| `EXPIRY_BATCH_SIZE` | `100` | URLs the expiry job loads and expires per batch (1 to 1000) |
 | `WORKER_HTTP_PORT` | `8086` | the health listener |
 
 The database, logging and telemetry variables are the API's; the worker's service name defaults to `fupi-worker`.
