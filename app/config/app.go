@@ -35,6 +35,13 @@ type MigrationSettings struct {
 	Path string
 }
 
+// ShortCodeSettings configures short code generation.
+type ShortCodeSettings struct {
+	// Key keys the permutation that turns the sequential short code counter into codes that cannot be enumerated. It
+	// must never change once codes have been issued with it: see ADR-0019.
+	Key string
+}
+
 // LoggingSettings configures the process logger.
 type LoggingSettings struct {
 	Level slog.Level
@@ -49,6 +56,7 @@ type App struct {
 	Database        DatabaseSettings
 	Redis           redis.RedisClientConfig
 	Auth            AuthConfig
+	ShortCode       ShortCodeSettings
 	Logging         LoggingSettings
 	ShutdownTimeout time.Duration
 	// Warnings are problems that do not stop startup but that the operator should see in the log.
@@ -76,6 +84,8 @@ func Load(lookup Lookup) (App, error) {
 	errs = append(errs, err)
 	app.Auth, err = LoadAuth(lookup)
 	errs = append(errs, err)
+	app.ShortCode, err = LoadShortCode(lookup)
+	errs = append(errs, err)
 	app.Logging, err = LoadLogging(lookup)
 	errs = append(errs, err)
 
@@ -92,6 +102,7 @@ func warnings(r *reader, app App) []string {
 
 	_, environmentSet := r.raw("ENVIRONMENT")
 	usesDevelopmentSecret := app.Auth.Secret == devAuthSecret ||
+		app.ShortCode.Key == devShortCodeKey ||
 		app.Redis.Password == devRedisPassword ||
 		(app.Database.Postgres.Url == "" && app.Database.Postgres.Password == devDatabasePassword)
 	if !environmentSet && usesDevelopmentSecret {
@@ -260,6 +271,26 @@ func LoadAuth(lookup Lookup) (AuthConfig, error) {
 	}
 	if r.enforceSecrets() && cfg.Secret == devAuthSecret {
 		r.fail("AUTH_SECRET must be set to a non-default value when ENVIRONMENT is not development or test")
+	}
+
+	return cfg, r.err()
+}
+
+// minShortCodeKeyLength is the shortest SHORT_CODE_KEY accepted outside development and test: 32 bytes is the
+// HMAC-SHA256 block of entropy the permutation can use.
+const minShortCodeKeyLength = 32
+
+// LoadShortCode reads the short code settings.
+func LoadShortCode(lookup Lookup) (ShortCodeSettings, error) {
+	r := newReader(lookup)
+	cfg := ShortCodeSettings{Key: r.str("SHORT_CODE_KEY", devShortCodeKey)}
+
+	if r.enforceSecrets() {
+		if cfg.Key == devShortCodeKey {
+			r.fail("SHORT_CODE_KEY must be set to a non-default value when ENVIRONMENT is not development or test")
+		} else if len(cfg.Key) < minShortCodeKeyLength {
+			r.fail("SHORT_CODE_KEY must be at least %d characters", minShortCodeKeyLength)
+		}
 	}
 
 	return cfg, r.err()

@@ -70,12 +70,12 @@ check_image() {
   out="$(docker run --rm "$image" 2>&1)"
   code=$?
   if [ "$code" -eq 1 ] && grep -q 'AUTH_SECRET' <<<"$out" && grep -q 'DATABASE_PASSWORD' <<<"$out" &&
-    grep -q 'REDIS_PASSWORD' <<<"$out"; then
+    grep -q 'REDIS_PASSWORD' <<<"$out" && grep -q 'SHORT_CODE_KEY' <<<"$out"; then
     pass "refuses to start without secrets (ENVIRONMENT=production)"
   else
     fail "refuses to start without secrets (exit $code: $out)"
   fi
-  if grep -qE 'fupi-secret|fupi-pass|fupi-svc' <<<"$out"; then fail "the refusal must not print a secret value"; else pass "the refusal prints no secret value"; fi
+  if grep -qE 'fupi-secret|fupi-pass|fupi-svc|fupi-short-code-key' <<<"$out"; then fail "the refusal must not print a secret value"; else pass "the refusal prints no secret value"; fi
 
   out="$(docker run --rm --entrypoint /app/migrator "$image" 2>&1)"
   code=$?

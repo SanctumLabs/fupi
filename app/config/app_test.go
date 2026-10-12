@@ -83,6 +83,7 @@ func TestLoad_Overrides(t *testing.T) {
 		"DATABASE_OPERATION_TIMEOUT": "9",
 		"REDIS_ADDRESS":              "r1:7001, r2:7002", "REDIS_USERNAME": "ru", "REDIS_PASSWORD": "rp",
 		"AUTH_SECRET": "s", "AUTH_ISSUER": "i", "AUTH_EXPIRE_DELTA": "5", "AUTH_REFRESH_EXPIRE_DELTA": "6",
+		"SHORT_CODE_KEY": "k",
 	}))
 	require.NoError(t, err)
 
@@ -103,6 +104,7 @@ func TestLoad_Overrides(t *testing.T) {
 	assert.Equal(t, []string{"r1:7001", "r2:7002"}, app.Redis.Address)
 	assert.Equal(t, "ru", app.Redis.Username)
 	assert.Equal(t, 5, app.Auth.ExpireDelta)
+	assert.Equal(t, "k", app.ShortCode.Key)
 }
 
 // A value that is set but empty means "not set": a .env line like REDIS_PASSWORD= must not become an empty secret.
@@ -166,10 +168,10 @@ func TestLoad_RefusesDevelopmentSecretsOutsideDevelopmentAndTest(t *testing.T) {
 			_, err := Load(lookupOf(map[string]string{"ENVIRONMENT": environment}))
 
 			require.Error(t, err)
-			for _, variable := range []string{"AUTH_SECRET", "DATABASE_PASSWORD", "REDIS_PASSWORD"} {
+			for _, variable := range []string{"AUTH_SECRET", "DATABASE_PASSWORD", "REDIS_PASSWORD", "SHORT_CODE_KEY"} {
 				assert.ErrorContains(t, err, variable)
 			}
-			for _, secret := range []string{"fupi-secret", "fupi-pass", "fupi-svc"} {
+			for _, secret := range []string{"fupi-secret", "fupi-pass", "fupi-svc", devShortCodeKey} {
 				assert.NotContains(t, err.Error(), secret, "an error must name the variable, never print a value")
 			}
 		})
@@ -186,9 +188,22 @@ func TestLoad_AllowsDevelopmentSecretsInDevelopmentAndTest(t *testing.T) {
 func TestLoad_AcceptsOverriddenSecretsInProduction(t *testing.T) {
 	_, err := Load(lookupOf(map[string]string{
 		"ENVIRONMENT": "production", "AUTH_SECRET": "a-real-secret", "DATABASE_PASSWORD": "a-real-password", "REDIS_PASSWORD": "a-real-redis-password",
+		"SHORT_CODE_KEY": strings.Repeat("k", minShortCodeKeyLength),
 	}))
 
 	assert.NoError(t, err)
+}
+
+// A short key is refused in production: the permutation is only as unguessable as its key.
+func TestLoadShortCode_RefusesAShortKeyInProduction(t *testing.T) {
+	_, err := LoadShortCode(lookupOf(map[string]string{
+		"ENVIRONMENT": "production", "SHORT_CODE_KEY": strings.Repeat("k", minShortCodeKeyLength-1),
+	}))
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "SHORT_CODE_KEY must be at least")
+
+	_, err = LoadShortCode(lookupOf(map[string]string{"ENVIRONMENT": "test", "SHORT_CODE_KEY": "short"}))
+	assert.NoError(t, err, "development and test accept any key")
 }
 
 // When DATABASE_URL is set the password lives in the URL, so that is where the development default is rejected.
@@ -271,6 +286,7 @@ func TestLoad_WarnsWhenEnvironmentIsUnsetAndDevelopmentSecretsAreInUse(t *testin
 
 	app, err = Load(lookupOf(map[string]string{
 		"AUTH_SECRET": "a-real-secret", "DATABASE_PASSWORD": "a-real-password", "REDIS_PASSWORD": "a-real-redis-password",
+		"SHORT_CODE_KEY": strings.Repeat("k", minShortCodeKeyLength),
 	}))
 	require.NoError(t, err)
 	assert.Empty(t, app.Warnings, "nothing to warn about once the secrets are real")
@@ -279,6 +295,7 @@ func TestLoad_WarnsWhenEnvironmentIsUnsetAndDevelopmentSecretsAreInUse(t *testin
 func TestLoad_WarnsAboutAnUnencryptedDatabaseConnectionOutsideDevelopment(t *testing.T) {
 	secrets := map[string]string{
 		"ENVIRONMENT": "production", "AUTH_SECRET": "a-real-secret", "DATABASE_PASSWORD": "a-real-password", "REDIS_PASSWORD": "a-real-redis-password",
+		"SHORT_CODE_KEY": strings.Repeat("k", minShortCodeKeyLength),
 	}
 
 	app, err := Load(lookupOf(secrets))
