@@ -207,5 +207,12 @@ func (rtr *urlRouter) redirect(ctx *fiber.Ctx) error {
 		return respondError(ctx, err)
 	}
 
+	rtr.svc.RecordAccess(urlapp.Access{
+		ShortCode: ctx.Params("code"),
+		IP:        ctx.IP(),
+		UserAgent: ctx.Get(fiber.HeaderUserAgent),
+		Referer:   ctx.Get(fiber.HeaderReferer),
+	})
+
 	return ctx.Redirect(target.Value(), fiber.StatusFound)
 }
