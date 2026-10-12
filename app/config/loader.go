@@ -17,6 +17,7 @@ const (
 	devAuthSecret       = "fupi-secret"
 	devDatabasePassword = "fupi-pass"
 	devRedisPassword    = "fupi-svc"
+	devShortCodeKey     = "fupi-short-code-key-for-development-only"
 )
 
 // Lookup reads one environment variable. os.LookupEnv satisfies it; tests pass a map.

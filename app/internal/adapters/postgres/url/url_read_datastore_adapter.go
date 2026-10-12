@@ -176,10 +176,10 @@ func (repo *urlReadDatastoreAdapter) FetchAll(ctx context.Context, params common
 		})
 }
 
-func (repo *urlReadDatastoreAdapter) FetchByStatus(ctx context.Context, status url.URLStatus) (repository.FetchRecordsResponse[url.URL], error) {
+func (repo *urlReadDatastoreAdapter) FetchByStatus(ctx context.Context, status url.URLStatus, params common.RequestParams) (repository.FetchRecordsResponse[url.URL], error) {
 	slog.InfoContext(ctx, fmt.Sprintf("%s<FetchByStatus> Fetching URLs by status", repo.logPrefix), "status", status)
 
-	queryParams := toQueryAllUrlsParams(common.NewRequestParams(), &status)
+	queryParams := toQueryAllUrlsParams(params, &status)
 
 	return repo.fetchMany(ctx, "FetchByStatus", int(queryParams.CurrentOffset), int(queryParams.LimitBy),
 		func(ctx context.Context, qtx postgresrepo.UrlReadQuerier) ([]postgresql.Url, int64, error) {
@@ -198,11 +198,18 @@ func (repo *urlReadDatastoreAdapter) FetchByStatus(ctx context.Context, status u
 		})
 }
 
-func (repo *urlReadDatastoreAdapter) FetchByUserId(ctx context.Context, userId string) (repository.FetchRecordsResponse[url.URL], error) {
+func (repo *urlReadDatastoreAdapter) FetchByUserId(ctx context.Context, userId string, params common.RequestParams) (repository.FetchRecordsResponse[url.URL], error) {
 	slog.InfoContext(ctx, fmt.Sprintf("%s<FetchByUserId> Fetching URLs by user id", repo.logPrefix), "user_id", userId)
 
-	params := common.NewRequestParams()
-	allUrlsParams := toQueryAllUrlsParams(params, nil)
+	// A user never sees their deleted urls, so the caller's IncludeDeleted is not honoured here.
+	params.IncludeDeleted = false
+
+	var status *url.URLStatus
+	if params.Status != "" {
+		parsed := url.URLStatus(params.Status)
+		status = &parsed
+	}
+	allUrlsParams := toQueryAllUrlsParams(params, status)
 
 	return repo.fetchMany(ctx, "FetchByUserId", int(allUrlsParams.CurrentOffset), int(allUrlsParams.LimitBy),
 		func(ctx context.Context, qtx postgresrepo.UrlReadQuerier) ([]postgresql.Url, int64, error) {

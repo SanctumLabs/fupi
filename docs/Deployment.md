@@ -27,6 +27,7 @@ The image sets `ENVIRONMENT=production`. In that mode the API, the migrator and 
 | Variable | Meaning |
 |---|---|
 | `AUTH_SECRET` | the JWT signing secret |
+| `SHORT_CODE_KEY` | keys the permutation that makes short codes non-sequential; at least 32 characters, and **never change it once codes have been issued** ([ADR-0019](adr/0019-short-codes-are-a-keyed-permutation-of-the-counter.md)) |
 | `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Postgres (the primary, port 5432); or `DATABASE_URL` instead, which wins over those |
 | `DATABASE_SSL_MODE` | defaults to `disable`; use `require` or stronger outside a private network (the API logs a warning otherwise) |
 | `REDIS_ADDRESS`, `REDIS_PASSWORD` | a comma-separated `host:port` list (one address gives a plain client, several a cluster client) and the password; `REDIS_USERNAME` defaults to `fupi-svc` |
@@ -61,7 +62,7 @@ It exits 0 when it applied the migrations or found nothing to do. If it reports 
 ## Running
 
 ```bash
-docker run -p 8085:8085 -e AUTH_SECRET=... -e DATABASE_HOST=... -e DATABASE_NAME=... -e DATABASE_USERNAME=... -e DATABASE_PASSWORD=... -e REDIS_ADDRESS=... -e REDIS_PASSWORD=... \
+docker run -p 8085:8085 -e AUTH_SECRET=... -e SHORT_CODE_KEY=... -e DATABASE_HOST=... -e DATABASE_NAME=... -e DATABASE_USERNAME=... -e DATABASE_PASSWORD=... -e REDIS_ADDRESS=... -e REDIS_PASSWORD=... \
   --name fupi-api <IMAGE_NAME>:<IMAGE_TAG>
 ```
 

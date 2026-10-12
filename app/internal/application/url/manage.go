@@ -11,6 +11,7 @@ import (
 	"github.com/sanctumlabs/fupi/app/internal/core/entity"
 	"github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
 	"github.com/sanctumlabs/fupi/app/internal/domain/url"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
 	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
@@ -31,12 +32,14 @@ func (svc *Service) Get(ctx context.Context, userID, id string) (_ url.URL, err 
 	return svc.fetchOwned(ctx, userID, id)
 }
 
-// List returns the caller's urls, deleted ones excluded.
-func (svc *Service) List(ctx context.Context, userID string) (_ repository.FetchRecordsResponse[url.URL], err error) {
+// List returns a page of the caller's urls, deleted ones excluded whatever params ask for.
+func (svc *Service) List(ctx context.Context, userID string, params common.RequestParams) (_ repository.FetchRecordsResponse[url.URL], err error) {
 	ctx, span := svc.startUseCase(ctx, "List")
 	defer func() { endUseCase(span, err) }()
 
-	return svc.urls.FetchByUserId(ctx, userID)
+	params.IncludeDeleted = false
+
+	return svc.urls.FetchByUserId(ctx, userID, params)
 }
 
 // Update changes the expiry and/or the keywords of one of the caller's urls.
