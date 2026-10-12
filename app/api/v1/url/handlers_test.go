@@ -17,6 +17,7 @@ import (
 	"github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
 	"github.com/sanctumlabs/fupi/app/internal/domain/url"
 	urlmock "github.com/sanctumlabs/fupi/app/internal/domain/url/mocks"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
 	mockports "github.com/sanctumlabs/fupi/app/internal/ports/mocks"
 	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"github.com/stretchr/testify/suite"
@@ -171,7 +172,7 @@ func (suite *UrlHandlersTestSuite) TestManagementRoutesRequireAnAuthenticatedCal
 // --- GET /urls, GET /urls/:id -----------------------------------------------------------------
 
 func (suite *UrlHandlersTestSuite) TestList_ReturnsThePage() {
-	suite.mockUrls.EXPECT().FetchByUserId(gomock.Any(), suite.userID).
+	suite.mockUrls.EXPECT().FetchByUserId(gomock.Any(), suite.userID, common.NewRequestParams()).
 		Return(repository.FetchRecordsResponse[url.URL]{Records: []url.URL{suite.ownedUrl()}, Total: 1, Page: 1, Size: 1}, nil)
 
 	status, body, _ := suite.do("GET", baseURI+"/urls", "")
@@ -179,6 +180,54 @@ func (suite *UrlHandlersTestSuite) TestList_ReturnsThePage() {
 	suite.Equal(fiber.StatusOK, status)
 	suite.Equal(float64(1), body["total"])
 	suite.Len(body["records"], 1)
+}
+
+func (suite *UrlHandlersTestSuite) TestList_PassesPagingOrderingAndStatusThrough() {
+	want := common.NewRequestParams(
+		common.WithRequestLimit(100), common.WithOffset(100),
+		common.WithOrderBy(common.OrderByUpdatedAt), common.WithSortOrder(common.SortOderAsc),
+		common.WithStatus("EXPIRED"))
+	suite.mockUrls.EXPECT().FetchByUserId(gomock.Any(), suite.userID, want).
+		Return(repository.FetchRecordsResponse[url.URL]{Records: []url.URL{}, Total: 150, Page: 2, Size: 50}, nil)
+
+	status, body, _ := suite.do("GET", baseURI+"/urls?page=2&size=100&order_by=updated_at&sort_order=asc&status=expired", "")
+
+	suite.Equal(fiber.StatusOK, status)
+	suite.Equal(float64(150), body["total"])
+	suite.Equal(float64(2), body["page"])
+}
+
+// TestList_IgnoresIncludeDeleted asserts a caller cannot ask for their deleted urls.
+func (suite *UrlHandlersTestSuite) TestList_IgnoresIncludeDeleted() {
+	suite.mockUrls.EXPECT().FetchByUserId(gomock.Any(), suite.userID, common.NewRequestParams()).
+		Return(repository.FetchRecordsResponse[url.URL]{Records: []url.URL{}}, nil)
+
+	status, _, _ := suite.do("GET", baseURI+"/urls?include_deleted=true", "")
+
+	suite.Equal(fiber.StatusOK, status)
+}
+
+func (suite *UrlHandlersTestSuite) TestList_InvalidQueryIs422NamingTheParameter() {
+	cases := map[string]string{
+		"page=0":              "page",
+		"page=abc":            "page",
+		"size=0":              "size",
+		"size=101":            "size",
+		"size=-1":             "size",
+		"order_by=deleted_at": "order_by",
+		"order_by=nope":       "order_by",
+		"sort_order=up":       "sort_order",
+		"status=DELETED":      "status",
+		"status=nope":         "status",
+	}
+	for query, parameter := range cases {
+		suite.Run(query, func() {
+			status, body, _ := suite.do("GET", baseURI+"/urls?"+query, "")
+
+			suite.Equal(fiber.StatusUnprocessableEntity, status)
+			suite.Contains(body["message"], parameter)
+		})
+	}
 }
 
 func (suite *UrlHandlersTestSuite) TestGet_AnotherUsersUrlIs404() {

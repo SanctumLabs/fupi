@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
 )
 
 type (
@@ -30,11 +31,12 @@ type (
 		// FetchByCustomAlias retrieves a URL entity by its custom alias
 		FetchByCustomAlias(ctx context.Context, customAlias string) (URL, error)
 
-		// FetchByUserId retrieves a list of URL entities by the user id of their owner
-		FetchByUserId(ctx context.Context, userId string) (repository.FetchRecordsResponse[URL], error)
+		// FetchByUserId retrieves a page of the URL entities owned by the user. Deleted URLs are never returned,
+		// whatever params.IncludeDeleted says; params.Status optionally narrows the page to one status.
+		FetchByUserId(ctx context.Context, userId string, params common.RequestParams) (repository.FetchRecordsResponse[URL], error)
 
-		// FetchByStatus retrieves a list of URL entities by their status
-		FetchByStatus(ctx context.Context, status URLStatus) (repository.FetchRecordsResponse[URL], error)
+		// FetchByStatus retrieves a page of the URL entities in the given status
+		FetchByStatus(ctx context.Context, status URLStatus, params common.RequestParams) (repository.FetchRecordsResponse[URL], error)
 
 		// FetchByOriginalUrl retrieves a URL entity by its original url
 		FetchByOriginalUrl(ctx context.Context, originalUrl string) (URL, error)
