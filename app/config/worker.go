@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"time"
+
+	"github.com/sanctumlabs/fupi/app/pkg/infra/cache/redis"
 )
 
 // KafkaSettings configures the Kafka producer.
@@ -28,19 +30,32 @@ type OutboxSettings struct {
 	Retention time.Duration
 }
 
+// SecuritySettings configures the url scanner. Scanning is optional: without a key the worker does not consume url.created.
+type SecuritySettings struct {
+	// SafeBrowsingAPIKey is the Google Safe Browsing API key; empty turns scanning off.
+	SafeBrowsingAPIKey string
+}
+
+// ScanningEnabled reports whether a scanner is configured.
+func (s SecuritySettings) ScanningEnabled() bool { return s.SafeBrowsingAPIKey != "" }
+
 // HealthSettings is where the worker's health listener binds.
 type HealthSettings struct {
 	Host string
 	Port int
 }
 
-// Worker is everything the worker process reads from its environment. It needs no AUTH_SECRET and no Redis.
+// Worker is everything the worker process reads from its environment. It needs no AUTH_SECRET, and no Redis unless scanning
+// is on: a flagged url is evicted from the redirect cache, so Redis and the cache settings are read only then.
 type Worker struct {
 	Environment     string
 	Health          HealthSettings
 	Database        DatabaseSettings
 	Kafka           KafkaSettings
 	Outbox          OutboxSettings
+	Security        SecuritySettings
+	Redis           redis.RedisClientConfig
+	RedirectCache   RedirectCacheSettings
 	Logging         LoggingSettings
 	ShutdownTimeout time.Duration
 	// Warnings are problems that do not stop startup but that the operator should see in the log.
@@ -68,6 +83,14 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	errs = append(errs, err)
 	worker.Outbox, err = LoadOutbox(lookup)
 	errs = append(errs, err)
+	worker.Security, err = LoadSecurity(lookup)
+	errs = append(errs, err)
+	if worker.Security.ScanningEnabled() {
+		worker.Redis, err = LoadRedis(lookup)
+		errs = append(errs, err)
+		worker.RedirectCache, err = LoadRedirectCache(lookup)
+		errs = append(errs, err)
+	}
 	worker.Logging, err = LoadLogging(lookup)
 	errs = append(errs, err)
 
@@ -139,4 +162,10 @@ func LoadOutbox(lookup Lookup) (OutboxSettings, error) {
 		r.fail("OUTBOX_RETENTION_DAYS must not be negative (0 turns the purge off)")
 	}
 	return settings, r.err()
+}
+
+// LoadSecurity reads the url scanner settings.
+func LoadSecurity(lookup Lookup) (SecuritySettings, error) {
+	r := newReader(lookup)
+	return SecuritySettings{SafeBrowsingAPIKey: r.str("SAFE_BROWSING_API_KEY", "")}, r.err()
 }
