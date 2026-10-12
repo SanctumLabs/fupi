@@ -47,6 +47,9 @@ const (
 	redisStartupPingTimeout = 2 * time.Second
 )
 
+// startTelemetry is telemetry.Start. It is a variable so a test can keep run from exporting to a collector.
+var startTelemetry = telemetry.Start
+
 // healthcheckTimeout bounds the container health probe. It is a variable so a test can shorten it.
 var healthcheckTimeout = 2 * time.Second
 
@@ -145,7 +148,7 @@ func probeHost(host string) string {
 // logged and the API carries on (readiness reports it as down).
 func run(ctx context.Context, cfg config.App) error {
 	// The deferred flush covers the early returns; the normal path flushes right after the server drains (below).
-	flushTelemetry := telemetry.Start(ctx, telemetry.Options{ServiceVersion: pkg.Version, Environment: cfg.Environment})
+	flushTelemetry := startTelemetry(ctx, telemetry.Options{ServiceVersion: pkg.Version, Environment: cfg.Environment})
 	defer flushTelemetry()
 
 	dbClient, err := postgres.NewPostgresClient(cfg.Database.Postgres)

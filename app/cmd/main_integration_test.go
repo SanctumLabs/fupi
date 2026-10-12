@@ -28,6 +28,7 @@ func freePort(t *testing.T) int {
 
 // With Postgres up and Redis down the API serves, reports itself degraded, and stops cleanly when its context ends.
 func TestRun_ServesReadinessAndStopsCleanlyOnCancel(t *testing.T) {
+	stubTelemetry(t)
 	ctx := context.Background()
 	container, err := test.TestPostgresDatabaseContainer(ctx, test.DefaultTestDatabaseConfig())
 	require.NoError(t, err)
