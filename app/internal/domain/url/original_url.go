@@ -1,6 +1,7 @@
 package url
 
 import (
+	"fmt"
 	neturl "net/url"
 	"strings"
 
@@ -22,15 +23,15 @@ func NewOriginalURL(url string) (OriginalURL, error) {
 	normalized := normalizeURL(url)
 
 	if l := len(normalized); l < MinLength || l > MaxLength {
-		return OriginalURL{}, errdefs.ErrInvalidURLLen
+		return OriginalURL{}, fmt.Errorf("%w: must be between %d and %d characters", errdefs.ErrInvalidURLLen, MinLength, MaxLength)
 	}
 
 	if filterRe.MatchString(normalized) {
-		return OriginalURL{}, errdefs.ErrFilteredURL
+		return OriginalURL{}, fmt.Errorf("%w: %q", errdefs.ErrFilteredURL, url)
 	}
 
 	if !urlRe.MatchString(normalized) {
-		return OriginalURL{}, errdefs.ErrInvalidURL
+		return OriginalURL{}, fmt.Errorf("%w: %q", errdefs.ErrInvalidURL, url)
 	}
 
 	return OriginalURL{value: normalized}, nil

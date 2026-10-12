@@ -150,6 +150,25 @@ func (suite *UrlHandlersTestSuite) TestCreate_InvalidUrlIs400() {
 	suite.Equal(fiber.StatusBadRequest, status)
 }
 
+func (suite *UrlHandlersTestSuite) TestCreate_RejectedUrlMessagesCarryNoFormatVerbs() {
+	code, _ := url.NewShortCode("000abc")
+	suite.mockGenerator.EXPECT().Next(gomock.Any()).Return(code, nil).AnyTimes()
+
+	for name, tc := range map[string]struct{ originalURL, message string }{
+		"malformed": {"this is not a url at all", "url is invalid"},
+		"filtered":  {"http://localhost/some/path", "url is not allowed"},
+		"too short": {"not a url", "must be between 15 and 2048 characters"},
+	} {
+		suite.Run(name, func() {
+			status, body, _ := suite.do("POST", baseURI+"/urls", `{"original_url": "`+tc.originalURL+`", "expires_on": "2099-01-01T00:00:00Z"}`)
+
+			suite.Equal(fiber.StatusBadRequest, status)
+			suite.Contains(body["message"], tc.message)
+			suite.NotContains(body["message"], "%")
+		})
+	}
+}
+
 func (suite *UrlHandlersTestSuite) TestCreate_AlreadyShortenedIs409WithoutTheDatabaseError() {
 	code, _ := url.NewShortCode("000abc")
 	suite.mockGenerator.EXPECT().Next(gomock.Any()).Return(code, nil)
