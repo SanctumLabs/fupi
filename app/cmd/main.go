@@ -50,6 +50,14 @@ const (
 // healthcheckTimeout bounds the container health probe. It is a variable so a test can shorten it.
 var healthcheckTimeout = 2 * time.Second
 
+// @title                      Fupi API
+// @version                    2.0
+// @description                Shortens urls, redirects visitors to them and manages the accounts that own them.
+// @BasePath                   /
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                Send "Bearer <access token>", the token returned by login.
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(healthcheck(os.LookupEnv, os.Stdout))

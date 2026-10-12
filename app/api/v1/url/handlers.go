@@ -19,12 +19,13 @@ func callerID(ctx *fiber.Ctx) (string, bool) {
 // @Tags        urls
 // @Accept      json
 // @Produce     json
-// @Security    ApiKeyAuth
+// @Security    BearerAuth
+// @Param       request body urlapi.createUrlRequestDto true "the url to shorten"
 // @Success     201 {object} urlapi.urlResponseDto
 // @Failure     400 {object} urlapi.errorResponseDto
 // @Failure     409 {object} urlapi.errorResponseDto
 // @Failure     422 {object} urlapi.errorResponseDto
-// @Router      /urls [post]
+// @Router      /api/v1/fupi/urls [post]
 func (rtr *urlRouter) create(ctx *fiber.Ctx) error {
 	userID, ok := callerID(ctx)
 	if !ok {
@@ -59,9 +60,9 @@ func (rtr *urlRouter) create(ctx *fiber.Ctx) error {
 // @Summary     List the caller's urls
 // @Tags        urls
 // @Produce     json
-// @Security    ApiKeyAuth
+// @Security    BearerAuth
 // @Success     200 {object} urlapi.urlListResponseDto
-// @Router      /urls [get]
+// @Router      /api/v1/fupi/urls [get]
 func (rtr *urlRouter) list(ctx *fiber.Ctx) error {
 	userID, ok := callerID(ctx)
 	if !ok {
@@ -92,11 +93,11 @@ func (rtr *urlRouter) list(ctx *fiber.Ctx) error {
 // @Summary     Get one of the caller's urls
 // @Tags        urls
 // @Produce     json
-// @Security    ApiKeyAuth
+// @Security    BearerAuth
 // @Param       id path string true "url id"
 // @Success     200 {object} urlapi.urlResponseDto
 // @Failure     404 {object} urlapi.errorResponseDto
-// @Router      /urls/{id} [get]
+// @Router      /api/v1/fupi/urls/{id} [get]
 func (rtr *urlRouter) get(ctx *fiber.Ctx) error {
 	userID, ok := callerID(ctx)
 	if !ok {
@@ -118,14 +119,15 @@ func (rtr *urlRouter) get(ctx *fiber.Ctx) error {
 // @Tags        urls
 // @Accept      json
 // @Produce     json
-// @Security    ApiKeyAuth
+// @Security    BearerAuth
 // @Param       id path string true "url id"
+// @Param       request body urlapi.updateUrlRequestDto true "the fields to change"
 // @Success     200 {object} urlapi.urlResponseDto
 // @Failure     400 {object} urlapi.errorResponseDto
 // @Failure     404 {object} urlapi.errorResponseDto
 // @Failure     409 {object} urlapi.errorResponseDto
 // @Failure     422 {object} urlapi.errorResponseDto
-// @Router      /urls/{id} [patch]
+// @Router      /api/v1/fupi/urls/{id} [patch]
 func (rtr *urlRouter) update(ctx *fiber.Ctx) error {
 	userID, ok := callerID(ctx)
 	if !ok {
@@ -158,11 +160,11 @@ func (rtr *urlRouter) update(ctx *fiber.Ctx) error {
 // Delete godoc
 // @Summary     Delete one of the caller's urls
 // @Tags        urls
-// @Security    ApiKeyAuth
+// @Security    BearerAuth
 // @Param       id path string true "url id"
 // @Success     204
 // @Failure     404 {object} urlapi.errorResponseDto
-// @Router      /urls/{id} [delete]
+// @Router      /api/v1/fupi/urls/{id} [delete]
 func (rtr *urlRouter) delete(ctx *fiber.Ctx) error {
 	userID, ok := callerID(ctx)
 	if !ok {
@@ -177,6 +179,14 @@ func (rtr *urlRouter) delete(ctx *fiber.Ctx) error {
 }
 
 // redirect sends the visitor of a short url to its target. It is public.
+//
+// Redirect godoc
+// @Summary     Follow a short url
+// @Tags        redirect
+// @Param       code path string true "short code or custom alias"
+// @Success     302 "redirects to the original url"
+// @Failure     404 {object} urlapi.errorResponseDto
+// @Router      /{code} [get]
 //
 // A 302 rather than a 301: a permanent redirect is cached by browsers indefinitely, so a url that is later deleted,
 // expired or suspended would keep redirecting.

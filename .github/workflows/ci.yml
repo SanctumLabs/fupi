@@ -68,9 +68,28 @@ jobs:
       database-port: 5432
       database-port-internal: 5432
 
+  # The OpenAPI spec is generated from the handler annotations (ADR-0019): fail when the committed copy is stale.
+  openapi:
+    name: OpenAPI spec is up to date
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Regenerate the spec and fail on a diff
+        run: make check.open.api.docs
+
   build:
     name: Build (${{ matrix.platform }})
-    needs: [ unit_tests, integration_tests, e2e_tests ]
+    needs: [ unit_tests, integration_tests, e2e_tests, openapi ]
 
     strategy:
       matrix:

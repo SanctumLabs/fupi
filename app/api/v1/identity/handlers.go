@@ -15,11 +15,12 @@ import (
 // @Tags        identity
 // @Accept      json
 // @Produce     json
+// @Param       request body identityapi.registerRequestDto true "the account to create"
 // @Success     201 {object} identityapi.userResponseDto
 // @Failure     400 {object} identityapi.errorResponseDto
 // @Failure     409 {object} identityapi.errorResponseDto
 // @Failure     422 {object} identityapi.errorResponseDto
-// @Router      /auth/register [post]
+// @Router      /api/v1/fupi/auth/register [post]
 func (rtr *identityRouter) register(ctx *fiber.Ctx) error {
 	var request registerRequestDto
 	if err := ctx.BodyParser(&request); err != nil {
@@ -52,11 +53,12 @@ func (rtr *identityRouter) register(ctx *fiber.Ctx) error {
 // @Tags        identity
 // @Accept      json
 // @Produce     json
+// @Param       request body identityapi.loginRequestDto true "the credentials"
 // @Success     200 {object} identityapi.loginResponseDto
 // @Failure     401 {object} identityapi.errorResponseDto
 // @Failure     403 {object} identityapi.errorResponseDto
 // @Failure     422 {object} identityapi.errorResponseDto
-// @Router      /auth/login [post]
+// @Router      /api/v1/fupi/auth/login [post]
 func (rtr *identityRouter) login(ctx *fiber.Ctx) error {
 	var request loginRequestDto
 	if err := ctx.BodyParser(&request); err != nil {
@@ -89,7 +91,7 @@ func (rtr *identityRouter) login(ctx *fiber.Ctx) error {
 // @Param       refresh_token query string true "the refresh token"
 // @Success     200 {object} identityapi.oauthTokenResponseDto
 // @Failure     401 {object} identityapi.errorResponseDto
-// @Router      /auth/oauth/token [post]
+// @Router      /api/v1/fupi/auth/oauth/token [post]
 func (rtr *identityRouter) oauthToken(ctx *fiber.Ctx) error {
 	if grantType := ctx.Query("grant_type"); grantType != "refresh_token" {
 		return ctx.Status(fiber.StatusUnauthorized).JSON(errorResponseDto{
@@ -118,7 +120,7 @@ func (rtr *identityRouter) oauthToken(ctx *fiber.Ctx) error {
 // @Param       v query string true "verification token"
 // @Success     200 {object} identityapi.userResponseDto
 // @Failure     400 {object} identityapi.errorResponseDto
-// @Router      /auth/verify [get]
+// @Router      /api/v1/fupi/auth/verify [get]
 func (rtr *identityRouter) verify(ctx *fiber.Ctx) error {
 	token := strings.TrimSpace(ctx.Query("v"))
 

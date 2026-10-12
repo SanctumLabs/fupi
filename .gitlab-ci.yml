@@ -76,6 +76,12 @@ e2e-tests:
   script:
     - make test.e2e
 
+openapi:
+  stage: test
+  <<: *go-cache
+  script:
+    - make check.open.api.docs
+
 build:
   stage: build
   <<: *go-cache

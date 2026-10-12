@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"strconv"
 	"time"
 
+	"github.com/sanctumlabs/fupi/app/api/openapi"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/logger"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/server/middleware"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
@@ -43,28 +43,21 @@ func NewServer(cfg ServerConfig) *Server {
 	app.Use(middleware.AccessLogMiddleware(cfg.ProbePaths))
 	app.Use(middleware.CORSMiddleware())
 
-	// Swagger specs are optional: the server must still start when they have not been generated
-	// (a fresh checkout, or a test binary running from a different working directory).
-	for _, cfg := range []swagger.Config{
-		{
-			BasePath: "/",
-			Path:     "docs/v1",
-			FilePath: "./api/openapi-spec/fupi_v1.swagger.json",
-			Title:    "Fupi V1 API Docs",
-		},
-		{
-			BasePath: "/",
-			Path:     "docs/monitoring",
-			FilePath: "./api/openapi-spec/monitoring.swagger.json",
-			Title:    "Fupi Monitoring API Docs",
-		},
-	} {
-		if _, err := os.Stat(cfg.FilePath); err != nil {
-			appLogger.Warnw("skipping swagger docs: spec file not found", "path", cfg.FilePath)
-			continue
+	// The spec is generated from the handler annotations and embedded (ADR-0019). The docs sit before the auth middleware,
+	// which is added later, so they are public. The swagger middleware matches /docs exactly, hence the rewrite of /docs/.
+	app.Use(func(ctx *fiber.Ctx) error {
+		if ctx.Path() == "/docs/" {
+			ctx.Path("/docs")
 		}
-		app.Use(middleware.SwaggerMiddleware(cfg))
-	}
+		return ctx.Next()
+	})
+	app.Use(middleware.SwaggerMiddleware(swagger.Config{
+		BasePath:    "/",
+		Path:        "docs",
+		FilePath:    "docs/swagger.json",
+		FileContent: openapi.Spec,
+		Title:       "Fupi API Docs",
+	}))
 
 	app.Use(middleware.HelmetMiddleware())
 	app.Use(middleware.IdempotencyMiddleware())

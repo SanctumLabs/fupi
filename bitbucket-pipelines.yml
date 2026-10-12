@@ -53,6 +53,13 @@ definitions:
           - export TESTCONTAINERS_RYUK_DISABLED=true
           - make test.e2e
 
+    - step: &openapi
+        name: OpenAPI spec is up to date
+        caches:
+          - gomod
+        script:
+          - make check.open.api.docs
+
     - step: &build
         name: Build
         caches:
@@ -97,6 +104,7 @@ pipelines:
         - step: *unit-tests
         - step: *integration-tests
         - step: *e2e-tests
+        - step: *openapi
     - step: *build
     - parallel:
         - step: *docker-lint
