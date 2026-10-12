@@ -189,6 +189,41 @@ func (rtr *urlRouter) delete(ctx *fiber.Ctx) error {
 	return ctx.SendStatus(fiber.StatusNoContent)
 }
 
+// reinstate puts a suspended url back to ACTIVE. Only admins may; the role is checked against the datastore on every
+// call, never read from the token (ADR-0022).
+//
+// Reinstate godoc
+// @Summary     Reinstate a suspended url (admin only)
+// @Tags        urls
+// @Security    BearerAuth
+// @Param       id path string true "url id"
+// @Success     204
+// @Failure     401
+// @Failure     403 {object} urlapi.errorResponseDto
+// @Failure     404 {object} urlapi.errorResponseDto
+// @Failure     409 {object} urlapi.errorResponseDto
+// @Router      /api/v1/fupi/urls/{id}/reinstate [post]
+func (rtr *urlRouter) reinstate(ctx *fiber.Ctx) error {
+	userID, ok := callerID(ctx)
+	if !ok {
+		return ctx.SendStatus(fiber.StatusUnauthorized)
+	}
+
+	isAdmin, adminErr := rtr.admins.IsAdmin(ctx.UserContext(), userID)
+	if adminErr != nil {
+		return respondError(ctx, adminErr)
+	}
+	if !isAdmin {
+		return ctx.Status(fiber.StatusForbidden).JSON(errorResponseDto{Message: "forbidden"})
+	}
+
+	if err := rtr.svc.Reinstate(ctx.UserContext(), ctx.Params("id")); err != nil {
+		return respondError(ctx, err)
+	}
+
+	return ctx.SendStatus(fiber.StatusNoContent)
+}
+
 // redirect sends the visitor of a short url to its target. It is public.
 //
 // Redirect godoc
