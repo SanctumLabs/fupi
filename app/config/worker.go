@@ -28,6 +28,14 @@ type OutboxSettings struct {
 	Retention time.Duration
 }
 
+// ExpirySettings configures the URL expiry job.
+type ExpirySettings struct {
+	// Interval is the wait between runs.
+	Interval time.Duration
+	// BatchSize is how many URLs one fetch loads.
+	BatchSize int
+}
+
 // HealthSettings is where the worker's health listener binds.
 type HealthSettings struct {
 	Host string
@@ -41,6 +49,7 @@ type Worker struct {
 	Database        DatabaseSettings
 	Kafka           KafkaSettings
 	Outbox          OutboxSettings
+	Expiry          ExpirySettings
 	Logging         LoggingSettings
 	ShutdownTimeout time.Duration
 	// Warnings are problems that do not stop startup but that the operator should see in the log.
@@ -67,6 +76,8 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	worker.Kafka, err = LoadKafka(lookup)
 	errs = append(errs, err)
 	worker.Outbox, err = LoadOutbox(lookup)
+	errs = append(errs, err)
+	worker.Expiry, err = LoadExpiry(lookup)
 	errs = append(errs, err)
 	worker.Logging, err = LoadLogging(lookup)
 	errs = append(errs, err)
@@ -137,6 +148,22 @@ func LoadOutbox(lookup Lookup) (OutboxSettings, error) {
 	}
 	if settings.Retention < 0 {
 		r.fail("OUTBOX_RETENTION_DAYS must not be negative (0 turns the purge off)")
+	}
+	return settings, r.err()
+}
+
+// LoadExpiry reads the URL expiry job settings.
+func LoadExpiry(lookup Lookup) (ExpirySettings, error) {
+	r := newReader(lookup)
+	settings := ExpirySettings{
+		Interval:  r.units("EXPIRY_INTERVAL", 60, time.Second),
+		BatchSize: r.integer("EXPIRY_BATCH_SIZE", 100),
+	}
+	if settings.Interval < time.Second {
+		r.fail("EXPIRY_INTERVAL must be at least 1 (seconds)")
+	}
+	if settings.BatchSize < 1 || settings.BatchSize > 1000 {
+		r.fail("EXPIRY_BATCH_SIZE must be between 1 and 1000")
 	}
 	return settings, r.err()
 }

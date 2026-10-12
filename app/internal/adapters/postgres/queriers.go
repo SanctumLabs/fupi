@@ -32,6 +32,7 @@ type (
 		QueryUrlByOriginalUrl(ctx context.Context, originalUrl string) (postgresql.QueryUrlByOriginalUrlRow, error)
 		QueryAllUrls(ctx context.Context, arg postgresql.QueryAllUrlsParams) ([]postgresql.QueryAllUrlsRow, error)
 		QueryAllUrlsByUserId(ctx context.Context, arg postgresql.QueryAllUrlsByUserIdParams) ([]postgresql.QueryAllUrlsByUserIdRow, error)
+		QueryCountExpiredActiveUrls(ctx context.Context, expiresBefore pgtype.Timestamptz) (int64, error)
 		QueryExpiredActiveUrls(ctx context.Context, arg postgresql.QueryExpiredActiveUrlsParams) ([]postgresql.QueryExpiredActiveUrlsRow, error)
 		QueryActiveKeywordsByUrlIds(ctx context.Context, urlIds []pgtype.UUID) ([]postgresql.QueryActiveKeywordsByUrlIdsRow, error)
 	}

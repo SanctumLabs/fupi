@@ -154,3 +154,43 @@ tests:
       - eval_time: 5m
         alertname: OutboxNoActiveRelay
         exp_alerts: []
+
+  - name: URLs past their expiry stay unexpired for a quarter of an hour
+    interval: 1m
+    input_series:
+      - {series: 'url_expiry_backlog{service_name="fupi-worker"}', values: "3x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryBacklog
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "URLs past their expiry have stayed ACTIVE for 15 minutes; the expiry job is behind or cannot update them"}
+
+  - name: An empty expiry backlog does not alert
+    interval: 1m
+    input_series:
+      - {series: 'url_expiry_backlog{service_name="fupi-worker"}', values: "0x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryBacklog
+        exp_alerts: []
+
+  - name: The expiry job stopped reporting runs
+    interval: 1m
+    input_series:
+      - {series: 'url_expiry_last_run_seconds{service_name="fupi-worker"}', values: "0x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryStalled
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "The URL expiry job has not completed a run for more than 10 minutes"}
+
+  - name: No expiry series at all, so no expiry alert
+    interval: 1m
+    input_series:
+      - {series: 'up{job="prometheus"}', values: "1x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryStalled
+        exp_alerts: []

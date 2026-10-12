@@ -303,6 +303,30 @@ func (q *Queries) QueryAllUrlsByUserId(ctx context.Context, arg QueryAllUrlsByUs
 	return items, nil
 }
 
+const queryCountExpiredActiveUrls = `-- name: QueryCountExpiredActiveUrls :one
+SELECT
+  COUNT(*)
+FROM urls u
+WHERE u.status = 'ACTIVE'
+  AND u.deleted_at IS NULL
+  AND u.expires_on < $1
+`
+
+// QueryCountExpiredActiveUrls
+//
+//	SELECT
+//	  COUNT(*)
+//	FROM urls u
+//	WHERE u.status = 'ACTIVE'
+//	  AND u.deleted_at IS NULL
+//	  AND u.expires_on < $1
+func (q *Queries) QueryCountExpiredActiveUrls(ctx context.Context, expiresBefore pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, queryCountExpiredActiveUrls, expiresBefore)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const queryExpiredActiveUrls = `-- name: QueryExpiredActiveUrls :many
 SELECT
   u.id, u.user_id, u.short_code, u.custom_alias, u.original_url, u.status, u.expires_on, u.og_title, u.og_description, u.og_image_url, u.metadata, u.created_at, u.updated_at, u.deleted_at

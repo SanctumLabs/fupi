@@ -328,3 +328,37 @@ func TestURL_Keywords(t *testing.T) {
 		}
 	})
 }
+
+// LoadedUpdatedAt is the version a datastore guards its update with: it stays what the aggregate was loaded with while
+// the aggregate's own updated time moves on with every change.
+func TestLoadedUpdatedAt_StaysTheHydratedTimeWhileTheEntityChanges(t *testing.T) {
+	p := createValidURLParams()
+	p.CreatedAt = time.Now().Add(-2 * time.Hour)
+	p.UpdatedAt = time.Now().Add(-time.Hour)
+	u, err := NewUrl(p)
+	if err != nil {
+		t.Fatalf("NewUrl: %v", err)
+	}
+	loaded := u.UpdatedAt()
+
+	if err := u.MarkExpired(); err != nil {
+		t.Fatalf("MarkExpired: %v", err)
+	}
+
+	if !u.LoadedUpdatedAt().Equal(loaded) {
+		t.Errorf("LoadedUpdatedAt() = %s, want %s", u.LoadedUpdatedAt(), loaded)
+	}
+	if !u.UpdatedAt().After(loaded) {
+		t.Errorf("UpdatedAt() = %s, want it after %s", u.UpdatedAt(), loaded)
+	}
+}
+
+func TestLoadedUpdatedAt_IsZeroForANewUrl(t *testing.T) {
+	u, err := Create(validCreateParams(t))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !u.LoadedUpdatedAt().IsZero() {
+		t.Errorf("LoadedUpdatedAt() = %s, want zero: nothing is stored yet", u.LoadedUpdatedAt())
+	}
+}

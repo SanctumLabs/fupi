@@ -1,5 +1,6 @@
-// Command worker runs the Fupi background worker. Today that is the outbox relay: one leader-elected process that delivers
-// the transactional outbox (ADR-0011) to Kafka with at-least-once delivery. The API never talks to Kafka (ADR-0015).
+// Command worker runs the Fupi background worker: the outbox relay, one leader-elected process that delivers the
+// transactional outbox (ADR-0011) to Kafka with at-least-once delivery, and the URL expiry job, also leader-elected. The
+// API never talks to Kafka (ADR-0015).
 package main
 
 import (
@@ -21,12 +22,16 @@ import (
 	"github.com/sanctumlabs/fupi/app/config"
 	kafkaadapter "github.com/sanctumlabs/fupi/app/internal/adapters/kafka"
 	outboxdatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/outbox"
+	urldatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/url"
 	"github.com/sanctumlabs/fupi/app/internal/application/outbox"
+	"github.com/sanctumlabs/fupi/app/internal/application/urlexpiry"
 	"github.com/sanctumlabs/fupi/app/pkg"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/monitoring/health"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/queue/kafka"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/telemetry"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
 )
 
 const (
@@ -42,6 +47,10 @@ const (
 	purgeBatch      = 1000
 	backoffMin      = 200 * time.Millisecond
 	backoffMax      = 10 * time.Second
+
+	// The expiry job's advisory lock and the name of its lease connection in pg_stat_activity.
+	expiryLeaseKey             = "fupi.url.expiry"
+	expiryLeaseApplicationName = "fupi-url-expiry-lease"
 )
 
 // healthcheckTimeout bounds the container health probe. It is a variable so a test can shorten it.
@@ -143,6 +152,14 @@ func relayConfig(settings config.OutboxSettings) outbox.Config {
 	}
 }
 
+func expiryConfig(cfg config.Worker) urlexpiry.Config {
+	return urlexpiry.Config{
+		Interval:        cfg.Expiry.Interval,
+		StandbyInterval: cfg.Outbox.StandbyInterval,
+		BatchSize:       cfg.Expiry.BatchSize,
+	}
+}
+
 // run builds the relay from cfg and relays until ctx is cancelled, then finishes the batch in flight, flushes telemetry and
 // closes its connections. Postgres is required: failing to reach it is an error. Kafka is not: the producer connects
 // lazily, an unreachable Kafka only makes the relay back off, and readiness reports it as down.
@@ -177,6 +194,21 @@ func run(ctx context.Context, cfg config.Worker) error {
 		return fmt.Errorf("create the outbox relay: %w", err)
 	}
 
+	// The expiry job elects its own leader, on its own lock, so it can run on a different instance than the relay.
+	expiryLeaser, err := outboxdatastore.NewLeaser(postgres.ConnectionString(cfg.Database.Postgres), expiryLeaseKey, expiryLeaseApplicationName,
+		cfg.Database.OperationTimeout, outboxdatastore.DefaultLeaseIdleTimeout)
+	if err != nil {
+		return fmt.Errorf("create the url expiry leaser: %w", err)
+	}
+	urls := urldatastore.NewUrlDatastoreAdapter(dbClient, database.Config{
+		OperationTimeout: cfg.Database.OperationTimeout,
+		RetryConfig:      recoveryutils.DefaultRetryConfig,
+	})
+	expiry, err := urlexpiry.NewJob(expiryLeaser, urls, expiryConfig(cfg))
+	if err != nil {
+		return fmt.Errorf("create the url expiry job: %w", err)
+	}
+
 	registry := health.NewRegistry(health.DefaultCheckTimeout)
 	registry.Add(health.Check{Name: "postgres", Required: true, Fn: dbClient.HealthCheck})
 	registry.Add(health.Check{Name: "kafka", Required: true, Fn: publisher.Ping})
@@ -197,6 +229,8 @@ func run(ctx context.Context, cfg config.Worker) error {
 	defer stopRelay()
 	relayDone := make(chan error, 1)
 	go func() { relayDone <- relay.Run(runCtx) }()
+	expiryDone := make(chan error, 1)
+	go func() { expiryDone <- expiry.Run(runCtx) }()
 
 	var runErr error
 	relayExited := false
@@ -215,12 +249,19 @@ func run(ctx context.Context, cfg config.Worker) error {
 	registry.SetDraining()
 	slog.Info("shutting down the worker", "timeout", cfg.ShutdownTimeout.String())
 	stopRelay()
+	stopped, stopWaiting := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer stopWaiting()
 	if !relayExited {
 		select {
 		case <-relayDone:
-		case <-time.After(cfg.ShutdownTimeout):
+		case <-stopped.Done():
 			runErr = errors.Join(runErr, fmt.Errorf("the relay did not stop within %s", cfg.ShutdownTimeout))
 		}
+	}
+	select {
+	case <-expiryDone:
+	case <-stopped.Done():
+		runErr = errors.Join(runErr, fmt.Errorf("the url expiry job did not stop within %s", cfg.ShutdownTimeout))
 	}
 
 	// The relay has stopped or given up: export the last spans and metrics now, before the connections close.
