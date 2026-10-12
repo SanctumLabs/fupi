@@ -76,6 +76,27 @@ func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) seedUrl(ctx context.Co
 	return savedUrl
 }
 
+// seedUrlsFor persists count URLs owned by one new user, returning the owner's id.
+func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) seedUrlsFor(ctx context.Context, count int, options ...urlmock.MockUrlOption) string {
+	owner, ownerErr := mockidentity.MockUser()
+	suite.Require().NoError(ownerErr)
+	_, saveOwnerErr := suite.userWriteDatastore.Save(ctx, *owner)
+	suite.Require().NoError(saveOwnerErr)
+
+	for range count {
+		defaults := []urlmock.MockUrlOption{
+			urlmock.WithUserId(owner.ID().String()),
+			urlmock.WithExpiresOn(time.Now().Add(24 * time.Hour)),
+		}
+		mockUrl, mockUrlErr := urlmock.MockUrl(append(defaults, options...)...)
+		suite.Require().NoError(mockUrlErr)
+		_, saveErr := suite.urlWriteDatastoreAdapter.Save(ctx, *mockUrl)
+		suite.Require().NoError(saveErr)
+	}
+
+	return owner.ID().String()
+}
+
 func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) newContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), suite.config.OperationTimeout)
 }
@@ -216,7 +237,7 @@ func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByUserId_Retu
 	// A second seeded URL belongs to a different user, so it must not appear in the result.
 	suite.seedUrl(ctx)
 
-	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, mine.UserId().String())
+	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, mine.UserId().String(), common.NewRequestParams())
 	suite.Require().NoError(actualErr)
 	suite.Equal(1, actual.Total)
 	suite.Require().Len(actual.Records, 1)
@@ -230,7 +251,7 @@ func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByUserId_Empt
 
 	suite.seedUrl(ctx)
 
-	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, entity.NewID().String())
+	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, entity.NewID().String(), common.NewRequestParams())
 	suite.Require().NoError(actualErr)
 	suite.Equal(0, actual.Total)
 	suite.Empty(actual.Records)
@@ -242,7 +263,7 @@ func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByStatus_Retu
 
 	saved := suite.seedUrl(ctx)
 
-	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByStatus(ctx, domainurl.URLStatusActive)
+	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByStatus(ctx, domainurl.URLStatusActive, common.NewRequestParams())
 	suite.Require().NoError(actualErr)
 	suite.Equal(1, actual.Total)
 	suite.Require().Len(actual.Records, 1)
@@ -258,7 +279,7 @@ func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByStatus_Empt
 
 	suite.seedUrl(ctx)
 
-	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByStatus(ctx, domainurl.URLStatusSuspended)
+	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByStatus(ctx, domainurl.URLStatusSuspended, common.NewRequestParams())
 	suite.Require().NoError(actualErr)
 	suite.Equal(0, actual.Total)
 	suite.Empty(actual.Records)
@@ -327,4 +348,88 @@ func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByOriginalUrl
 			suite.Equal(saved.ID(), actual.ID())
 		})
 	}
+}
+
+// TestFetchByUserId_PagesThroughEveryUrl checks the second page of a user's 150 urls carries the remaining 50 and the
+// total still counts all 150.
+func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByUserId_PagesThroughEveryUrl() {
+	ctx, cancel := suite.newContext()
+	defer cancel()
+
+	owner := suite.seedUrlsFor(ctx, 150)
+
+	first, firstErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, owner,
+		common.NewRequestParams(common.WithRequestLimit(100), common.WithOffset(0)))
+	suite.Require().NoError(firstErr)
+	suite.Equal(150, first.Total)
+	suite.Equal(100, first.Size)
+	suite.Equal(1, first.Page)
+
+	second, secondErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, owner,
+		common.NewRequestParams(common.WithRequestLimit(100), common.WithOffset(100)))
+	suite.Require().NoError(secondErr)
+	suite.Equal(150, second.Total)
+	suite.Equal(50, second.Size)
+	suite.Equal(2, second.Page)
+
+	seen := make(map[string]struct{}, 150)
+	for _, record := range append(first.Records, second.Records...) {
+		seen[record.ID().String()] = struct{}{}
+	}
+	suite.Len(seen, 150, "the two pages must not overlap")
+}
+
+func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByUserId_OrdersByCreatedAt() {
+	ctx, cancel := suite.newContext()
+	defer cancel()
+
+	owner := suite.seedUrlsFor(ctx, 3)
+
+	for _, order := range []common.SortOrder{common.SortOderAsc, common.SortOrderDesc} {
+		actual, actualErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, owner, common.NewRequestParams(common.WithSortOrder(order)))
+		suite.Require().NoError(actualErr)
+		suite.Require().Len(actual.Records, 3)
+		for i := 1; i < len(actual.Records); i++ {
+			earlier, later := actual.Records[i-1].CreatedAt(), actual.Records[i].CreatedAt()
+			if order == common.SortOderAsc {
+				suite.False(earlier.After(later), "ASC: %v should not be after %v", earlier, later)
+			} else {
+				suite.False(earlier.Before(later), "DESC: %v should not be before %v", earlier, later)
+			}
+		}
+	}
+}
+
+func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByUserId_FiltersByStatus() {
+	ctx, cancel := suite.newContext()
+	defer cancel()
+
+	owner := suite.seedUrlsFor(ctx, 2)
+
+	expired, expiredErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, owner,
+		common.NewRequestParams(common.WithStatus(string(domainurl.URLStatusExpired))))
+	suite.Require().NoError(expiredErr)
+	suite.Equal(0, expired.Total)
+
+	active, activeErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, owner,
+		common.NewRequestParams(common.WithStatus(string(domainurl.URLStatusActive))))
+	suite.Require().NoError(activeErr)
+	suite.Equal(2, active.Total)
+}
+
+// TestFetchByUserId_NeverReturnsDeletedUrls asserts a soft-deleted url stays hidden even when the params ask for it.
+func (suite *UrlReadDatastoreAdapterIntegrationTestSuite) TestFetchByUserId_NeverReturnsDeletedUrls() {
+	ctx, cancel := suite.newContext()
+	defer cancel()
+
+	saved := suite.seedUrl(ctx)
+	suite.Require().NoError(saved.MarkDeleted())
+	_, updateErr := suite.urlWriteDatastoreAdapter.Update(ctx, saved)
+	suite.Require().NoError(updateErr)
+	owner := saved.UserId().String()
+
+	actual, actualErr := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, owner, common.NewRequestParams(common.WithIncludeDeleted(true)))
+	suite.Require().NoError(actualErr)
+	suite.Equal(0, actual.Total)
+	suite.Empty(actual.Records)
 }
