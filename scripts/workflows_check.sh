@@ -5,7 +5,9 @@
 #  2. every workflow declares top-level permissions;
 #  3. in a workflow_run workflow every checkout names the triggering commit or branch (the default is the default branch);
 #  4. Dependabot keeps the gomod, docker and github-actions pins current;
-#  5. a workflow_run workflow checks workflow_run.conclusion, so it does not run when the workflow it follows failed.
+#  5. a workflow_run workflow checks workflow_run.conclusion, so it does not run when the workflow it follows failed;
+#  6. only slack.yml uses workflow_run: a workflow triggered by another workflow_run workflow runs against the default branch's
+#     head, not the tested commit, so the build, publish and release jobs are chained with `needs:` in ci.yml instead.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 shopt -s nullglob
@@ -22,6 +24,7 @@ for f in .github/workflows/*.yml; do
   done < <(sed -nE 's/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*([^[:space:]#]+).*/\2/p' "$f")
 
   if grep -qE '^[[:space:]]*workflow_run:' "$f"; then
+    [ "$f" = .github/workflows/slack.yml ] || fail "$f: only slack.yml may use workflow_run, chain the jobs with needs: in ci.yml"
     grep -qF 'workflow_run.conclusion' "$f" ||
       fail "$f: a workflow_run workflow does not check workflow_run.conclusion, so it runs even when the workflow it follows failed"
     awk -v file="$f" '
