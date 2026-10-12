@@ -54,14 +54,20 @@ func (rtr *urlRouter) create(ctx *fiber.Ctx) error {
 	return ctx.Status(fiber.StatusCreated).JSON(toUrlResponse(rtr.shortBaseURL, created))
 }
 
-// list returns the caller's urls.
+// list returns a page of the caller's urls.
 //
 // List godoc
 // @Summary     List the caller's urls
 // @Tags        urls
 // @Produce     json
 // @Security    BearerAuth
+// @Param       page       query int    false "page number, from 1"          default(1)   minimum(1)
+// @Param       size       query int    false "page size"                    default(100) minimum(1) maximum(100)
+// @Param       order_by   query string false "field to order by"            Enums(created_at, updated_at)
+// @Param       sort_order query string false "sort direction"               Enums(ASC, DESC)
+// @Param       status     query string false "only urls in this status"     Enums(ACTIVE, EXPIRED, SUSPENDED)
 // @Success     200 {object} urlapi.urlListResponseDto
+// @Failure     422 {object} urlapi.errorResponseDto
 // @Router      /api/v1/fupi/urls [get]
 func (rtr *urlRouter) list(ctx *fiber.Ctx) error {
 	userID, ok := callerID(ctx)
@@ -69,7 +75,12 @@ func (rtr *urlRouter) list(ctx *fiber.Ctx) error {
 		return ctx.SendStatus(fiber.StatusUnauthorized)
 	}
 
-	page, err := rtr.svc.List(ctx.UserContext(), userID)
+	params, paramsErr := parseListParams(ctx)
+	if paramsErr != nil {
+		return respondValidationError(ctx, paramsErr.Error())
+	}
+
+	page, err := rtr.svc.List(ctx.UserContext(), userID, params)
 	if err != nil {
 		return respondError(ctx, err)
 	}

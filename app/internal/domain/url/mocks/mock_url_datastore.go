@@ -134,33 +134,33 @@ func (mr *MockUrlDatastoreMockRecorder) FetchByShortCode(ctx, shortCode any) *go
 }
 
 // FetchByStatus mocks base method.
-func (m *MockUrlDatastore) FetchByStatus(ctx context.Context, status url.URLStatus) (repository.FetchRecordsResponse[url.URL], error) {
+func (m *MockUrlDatastore) FetchByStatus(ctx context.Context, status url.URLStatus, params common.RequestParams) (repository.FetchRecordsResponse[url.URL], error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchByStatus", ctx, status)
+	ret := m.ctrl.Call(m, "FetchByStatus", ctx, status, params)
 	ret0, _ := ret[0].(repository.FetchRecordsResponse[url.URL])
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FetchByStatus indicates an expected call of FetchByStatus.
-func (mr *MockUrlDatastoreMockRecorder) FetchByStatus(ctx, status any) *gomock.Call {
+func (mr *MockUrlDatastoreMockRecorder) FetchByStatus(ctx, status, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByStatus", reflect.TypeOf((*MockUrlDatastore)(nil).FetchByStatus), ctx, status)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByStatus", reflect.TypeOf((*MockUrlDatastore)(nil).FetchByStatus), ctx, status, params)
 }
 
 // FetchByUserId mocks base method.
-func (m *MockUrlDatastore) FetchByUserId(ctx context.Context, userId string) (repository.FetchRecordsResponse[url.URL], error) {
+func (m *MockUrlDatastore) FetchByUserId(ctx context.Context, userId string, params common.RequestParams) (repository.FetchRecordsResponse[url.URL], error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchByUserId", ctx, userId)
+	ret := m.ctrl.Call(m, "FetchByUserId", ctx, userId, params)
 	ret0, _ := ret[0].(repository.FetchRecordsResponse[url.URL])
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FetchByUserId indicates an expected call of FetchByUserId.
-func (mr *MockUrlDatastoreMockRecorder) FetchByUserId(ctx, userId any) *gomock.Call {
+func (mr *MockUrlDatastoreMockRecorder) FetchByUserId(ctx, userId, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByUserId", reflect.TypeOf((*MockUrlDatastore)(nil).FetchByUserId), ctx, userId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByUserId", reflect.TypeOf((*MockUrlDatastore)(nil).FetchByUserId), ctx, userId, params)
 }
 
 // FetchExpiredActive mocks base method.
@@ -404,33 +404,33 @@ func (mr *MockUrlReadDatastoreMockRecorder) FetchByShortCode(ctx, shortCode any)
 }
 
 // FetchByStatus mocks base method.
-func (m *MockUrlReadDatastore) FetchByStatus(ctx context.Context, status url.URLStatus) (repository.FetchRecordsResponse[url.URL], error) {
+func (m *MockUrlReadDatastore) FetchByStatus(ctx context.Context, status url.URLStatus, params common.RequestParams) (repository.FetchRecordsResponse[url.URL], error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchByStatus", ctx, status)
+	ret := m.ctrl.Call(m, "FetchByStatus", ctx, status, params)
 	ret0, _ := ret[0].(repository.FetchRecordsResponse[url.URL])
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FetchByStatus indicates an expected call of FetchByStatus.
-func (mr *MockUrlReadDatastoreMockRecorder) FetchByStatus(ctx, status any) *gomock.Call {
+func (mr *MockUrlReadDatastoreMockRecorder) FetchByStatus(ctx, status, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByStatus", reflect.TypeOf((*MockUrlReadDatastore)(nil).FetchByStatus), ctx, status)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByStatus", reflect.TypeOf((*MockUrlReadDatastore)(nil).FetchByStatus), ctx, status, params)
 }
 
 // FetchByUserId mocks base method.
-func (m *MockUrlReadDatastore) FetchByUserId(ctx context.Context, userId string) (repository.FetchRecordsResponse[url.URL], error) {
+func (m *MockUrlReadDatastore) FetchByUserId(ctx context.Context, userId string, params common.RequestParams) (repository.FetchRecordsResponse[url.URL], error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchByUserId", ctx, userId)
+	ret := m.ctrl.Call(m, "FetchByUserId", ctx, userId, params)
 	ret0, _ := ret[0].(repository.FetchRecordsResponse[url.URL])
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FetchByUserId indicates an expected call of FetchByUserId.
-func (mr *MockUrlReadDatastoreMockRecorder) FetchByUserId(ctx, userId any) *gomock.Call {
+func (mr *MockUrlReadDatastoreMockRecorder) FetchByUserId(ctx, userId, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByUserId", reflect.TypeOf((*MockUrlReadDatastore)(nil).FetchByUserId), ctx, userId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByUserId", reflect.TypeOf((*MockUrlReadDatastore)(nil).FetchByUserId), ctx, userId, params)
 }
 
 // FetchExpiredActive mocks base method.

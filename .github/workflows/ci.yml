@@ -251,6 +251,7 @@ jobs:
             AUTH_SECRET="$AUTH_SECRET" \
             AUTH_EXPIRE="$AUTH_EXPIRE" \
             AUTH_ISSUER="$AUTH_ISSUER" \
+            SHORT_CODE_KEY="$SHORT_CODE_KEY" \
             CACHE_HOST="$CACHE_HOST" \
             CACHE_PORT="$CACHE_PORT" \
             CACHE_USERNAME="$CACHE_USERNAME" \
@@ -274,6 +275,7 @@ jobs:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           AUTH_EXPIRE: ${{ secrets.AUTH_EXPIRE }}
           AUTH_ISSUER: ${{ secrets.AUTH_ISSUER }}
+          SHORT_CODE_KEY: ${{ secrets.SHORT_CODE_KEY }}
           CACHE_HOST: ${{ secrets.CACHE_HOST }}
           CACHE_PORT: ${{ secrets.CACHE_PORT }}
           CACHE_USERNAME: ${{ secrets.CACHE_USERNAME }}

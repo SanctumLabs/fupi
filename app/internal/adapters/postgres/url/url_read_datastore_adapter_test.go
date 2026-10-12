@@ -255,7 +255,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByStatus_FiltersByStatus
 		Return([]postgresql.QueryAllUrlsRow{{Url: urlRecord, TotalRecords: 1}}, nil).
 		Times(1)
 
-	actual, err := suite.urlReadDatastoreAdapter.FetchByStatus(ctx, domainurl.URLStatusExpired)
+	actual, err := suite.urlReadDatastoreAdapter.FetchByStatus(ctx, domainurl.URLStatusExpired, common.NewRequestParams())
 	suite.NoError(err)
 	suite.Equal(1, actual.Total)
 	suite.Require().Len(actual.Records, 1)
@@ -270,7 +270,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByStatus_Empty() {
 		Return([]postgresql.QueryAllUrlsRow{}, nil).
 		Times(1)
 
-	actual, err := suite.urlReadDatastoreAdapter.FetchByStatus(context.Background(), domainurl.URLStatusExpired)
+	actual, err := suite.urlReadDatastoreAdapter.FetchByStatus(context.Background(), domainurl.URLStatusExpired, common.NewRequestParams())
 	suite.NoError(err)
 	suite.Equal(0, actual.Total)
 	suite.Empty(actual.Records)
@@ -290,7 +290,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_FiltersByUser()
 		Return([]postgresql.QueryAllUrlsByUserIdRow{{Url: urlRecord, TotalRecords: 1}}, nil).
 		Times(1)
 
-	actual, err := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, userId.String())
+	actual, err := suite.urlReadDatastoreAdapter.FetchByUserId(ctx, userId.String(), common.NewRequestParams())
 	suite.NoError(err)
 	suite.Equal(1, actual.Total)
 	suite.Require().Len(actual.Records, 1)
@@ -298,9 +298,52 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_FiltersByUser()
 	suite.Equal(userId, actual.Records[0].UserId())
 }
 
+// TestFetchByUserId_AppliesTheCallersParams asserts the page window, ordering and status reach the query rather than
+// the defaults.
+func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_AppliesTheCallersParams() {
+	suite.expectKeywords()
+	userId := entity.NewID()
+	_, urlRecord := suite.newMockUrlRow(urlmock.WithUserId(userId.String()))
+
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryAllUrlsByUserId(gomock.Any(), gomock.Cond(func(p postgresql.QueryAllUrlsByUserIdParams) bool {
+			return p.LimitBy == 10 && p.CurrentOffset == 20 &&
+				p.OrderBy == string(common.OrderByUpdatedAt) && p.SortOrder == string(common.SortOderAsc) &&
+				p.UrlStatus.Valid && p.UrlStatus.UrlStatus == postgresql.UrlStatusEXPIRED
+		})).
+		Return([]postgresql.QueryAllUrlsByUserIdRow{{Url: urlRecord, TotalRecords: 21}}, nil).
+		Times(1)
+
+	params := common.NewRequestParams(
+		common.WithRequestLimit(10), common.WithOffset(20),
+		common.WithOrderBy(common.OrderByUpdatedAt), common.WithSortOrder(common.SortOderAsc),
+		common.WithStatus(string(domainurl.URLStatusExpired)))
+
+	actual, err := suite.urlReadDatastoreAdapter.FetchByUserId(context.Background(), userId.String(), params)
+	suite.NoError(err)
+	suite.Equal(21, actual.Total)
+	suite.Equal(3, actual.Page)
+}
+
+// TestFetchByUserId_NeverIncludesDeleted asserts a user's deleted urls stay hidden whatever the params ask for.
+func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_NeverIncludesDeleted() {
+	suite.mockUrlReadQuerier.
+		EXPECT().
+		QueryAllUrlsByUserId(gomock.Any(), gomock.Cond(func(p postgresql.QueryAllUrlsByUserIdParams) bool {
+			return !p.IncludeDeleted
+		})).
+		Return([]postgresql.QueryAllUrlsByUserIdRow{}, nil).
+		Times(1)
+
+	_, err := suite.urlReadDatastoreAdapter.FetchByUserId(context.Background(), entity.NewID().String(),
+		common.NewRequestParams(common.WithIncludeDeleted(true)))
+	suite.NoError(err)
+}
+
 // TestFetchByUserId_InvalidId asserts a malformed user id never reaches the database.
 func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_InvalidId() {
-	actual, err := suite.urlReadDatastoreAdapter.FetchByUserId(context.Background(), "not-a-uuid")
+	actual, err := suite.urlReadDatastoreAdapter.FetchByUserId(context.Background(), "not-a-uuid", common.NewRequestParams())
 	suite.Error(err)
 	suite.Empty(actual.Records)
 }
@@ -312,7 +355,7 @@ func (suite *UrlReadDatastoreAdapterTestSuite) TestFetchByUserId_QueryError() {
 		Return(nil, errors.New("boom")).
 		Times(1)
 
-	actual, err := suite.urlReadDatastoreAdapter.FetchByUserId(context.Background(), entity.NewID().String())
+	actual, err := suite.urlReadDatastoreAdapter.FetchByUserId(context.Background(), entity.NewID().String(), common.NewRequestParams())
 	suite.Error(err)
 	suite.Empty(actual.Records)
 }
