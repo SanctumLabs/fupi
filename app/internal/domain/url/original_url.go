@@ -71,9 +71,7 @@ func normalizeURL(raw string) string {
 	}
 
 	// A trailing slash addresses the same resource, so "/path/" and "/path" must not be two rows.
-	if strings.HasSuffix(parsed.Path, "/") {
-		parsed.Path = strings.TrimSuffix(parsed.Path, "/")
-	}
+	parsed.Path = strings.TrimSuffix(parsed.Path, "/")
 
 	return parsed.String()
 }
