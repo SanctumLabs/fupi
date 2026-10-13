@@ -24,7 +24,7 @@ type (
 		Environment string `env:"ENVIRONMENT" env-required:"false" env-description:"Application Environment" env-default:"production"`
 		// ProbePaths are the health probe routes. They get no span and no metric, and their access log line is debug level.
 		ProbePaths []string
-		// Guards run in order on every request, after the security headers and before idempotency, so the responses they
+		// Guards run in order on every request, after the security headers and panic recovery and before idempotency, so the responses they
 		// give still carry the headers and are never stored against an idempotency key.
 		Guards []fiber.Handler
 	}

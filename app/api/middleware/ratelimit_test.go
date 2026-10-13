@@ -51,6 +51,12 @@ func TestRateLimitGroups_Routing(t *testing.T) {
 		// /docs is shaped like a short code. It is never limited at all: the middleware exempts it before any group is asked.
 		{http.MethodGet, "/docs", "redirect"},
 		{http.MethodGet, testBaseURI + "/urls/xyz", "default"},
+		// Fiber routes case- and trailing-slash-insensitively, so the groups must match the same way.
+		{http.MethodPost, testBaseURI + "/urls/", "create"},
+		{http.MethodPost, "/API/V1/FUPI/URLS", "create"},
+		{http.MethodPost, testBaseURI + "/auth/login/", "auth"},
+		{http.MethodPost, "/API/v1/fupi/AUTH/login", "auth"},
+		{http.MethodGet, "/ABC123/", "redirect"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {

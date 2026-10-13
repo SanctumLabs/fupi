@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/sanctumlabs/fupi/app/api/probes"
 	"github.com/sanctumlabs/fupi/app/config"
 	"github.com/stretchr/testify/assert"
@@ -145,4 +146,33 @@ func TestHealthcheck_RejectsAnInvalidPort(t *testing.T) {
 
 	assert.Equal(t, 1, code)
 	assert.Contains(t, out.String(), "HTTP_PORT")
+}
+
+// The docs are exempt from the limiter, but a short code that merely starts with "docs" is a redirect like any other.
+func TestNewRateLimiter_ExemptsTheDocsButNotCodesStartingWithDocs(t *testing.T) {
+	one := config.RateLimitRule{Max: 1, Window: time.Minute}
+	limit, err := newRateLimiter(config.App{RateLimit: config.RateLimitSettings{
+		Auth: one, Create: one, Redirect: one, Default: one,
+		RedisTimeout: time.Second, RedisRetryAfter: time.Second,
+	}}, nil)
+	require.NoError(t, err)
+
+	app := fiber.New()
+	app.Use(limit)
+	app.Use(func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+
+	statuses := func(path string) []int {
+		var got []int
+		for range 3 {
+			resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+			require.NoError(t, err)
+			got = append(got, resp.StatusCode)
+		}
+		return got
+	}
+
+	for _, path := range []string{"/docs", "/docs/", "/docs/swagger.json", probes.LivePath, probes.ReadyPath} {
+		assert.Equal(t, []int{200, 200, 200}, statuses(path), path)
+	}
+	assert.Equal(t, []int{200, 429, 429}, statuses("/docs0000"))
 }

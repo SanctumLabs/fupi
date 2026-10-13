@@ -16,20 +16,26 @@ type RateLimitRules struct {
 // RateLimitGroups returns the route groups the rate limiter tells apart, most specific first: the credential endpoints
 // (auth), url creation (create), the public redirect (redirect) and everything else (default). Create is limited per
 // authenticated user, so the limiter must run after AuthMiddleware.
+//
+// Fiber routes without regard to case or a trailing slash, so the groups match the same way: a request cannot move to
+// a looser group by changing the case of its path or adding a slash.
 func RateLimitGroups(baseURI string, redirect *regexp.Regexp, rules RateLimitRules) []servermw.RateLimitGroup {
+	authPrefix := strings.ToLower(baseURI + "/auth/")
+	createPath := strings.ToLower(baseURI + "/urls")
+
 	return []servermw.RateLimitGroup{
 		{
 			Name: "auth",
 			Rule: rules.Auth,
 			Match: func(c *fiber.Ctx) bool {
-				return strings.HasPrefix(c.Path(), baseURI+"/auth/")
+				return strings.HasPrefix(routedPath(c), authPrefix)
 			},
 		},
 		{
 			Name: "create",
 			Rule: rules.Create,
 			Match: func(c *fiber.Ctx) bool {
-				return c.Method() == fiber.MethodPost && c.Path() == baseURI+"/urls"
+				return c.Method() == fiber.MethodPost && routedPath(c) == createPath
 			},
 			Key: func(c *fiber.Ctx) string {
 				if userID, _ := c.Locals(UserIDContextKey).(string); userID != "" {
@@ -42,9 +48,18 @@ func RateLimitGroups(baseURI string, redirect *regexp.Regexp, rules RateLimitRul
 			Name: "redirect",
 			Rule: rules.Redirect,
 			Match: func(c *fiber.Ctx) bool {
-				return c.Method() == fiber.MethodGet && redirect.MatchString(c.Path())
+				return c.Method() == fiber.MethodGet && redirect.MatchString(routedPath(c))
 			},
 		},
 		{Name: "default", Rule: rules.Default},
 	}
+}
+
+// routedPath is the request path as Fiber routes it: lower case, without a trailing slash (the root stays "/").
+func routedPath(c *fiber.Ctx) string {
+	path := strings.ToLower(c.Path())
+	if len(path) > 1 {
+		path = strings.TrimSuffix(path, "/")
+	}
+	return path
 }

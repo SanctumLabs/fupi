@@ -59,13 +59,14 @@ func NewServer(cfg ServerConfig) *Server {
 		Title:       "Fupi API Docs",
 	}))
 
+	// Recover sits behind Helmet and ahead of the guards, so a panic anywhere after it, in authentication or the rate
+	// limiter included, becomes a 500 that still carries the security headers.
 	app.Use(middleware.HelmetMiddleware())
+	app.Use(middleware.RecoverMiddleware())
 	for _, guard := range cfg.Guards {
 		app.Use(guard)
 	}
 	app.Use(middleware.IdempotencyMiddleware())
-
-	app.Use(middleware.RecoverMiddleware())
 
 	return &Server{
 		app: app,

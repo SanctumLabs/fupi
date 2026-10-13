@@ -326,3 +326,15 @@ func TestServer_GuardsRunBeforeIdempotency(t *testing.T) {
 	verdict.allowed.Store(true)
 	assert.Equal(t, fiber.StatusCreated, post(keyB), "the 429 must not be replayed for the same idempotency key")
 }
+
+// Guards such as authentication run before the handlers, so a panic in one must become a 500, not a crash.
+func TestServer_RecoversFromAPanicInAGuard(t *testing.T) {
+	srv := NewServer(ServerConfig{Port: 0, AppName: "fupi-test", Guards: []fiber.Handler{
+		func(*fiber.Ctx) error { panic("guard failed") },
+	}})
+	srv.App().Get("/things", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+
+	resp, err := srv.App().Test(httptest.NewRequest(http.MethodGet, "/things", nil))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+}

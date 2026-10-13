@@ -124,8 +124,9 @@ func newRateLimiter(cfg config.App, client cache.CacheClient) (fiber.Handler, er
 			Redirect: rule(rl.Redirect),
 			Default:  rule(rl.Default),
 		}),
-		ExemptPaths:     []string{probes.LivePath, probes.ReadyPath},
-		ExemptPrefixes:  []string{"/docs"},
+		// The same public paths as the auth middleware. "/docs" alone must not be a prefix: "/docs0000" is a short code.
+		ExemptPaths:     []string{probes.LivePath, probes.ReadyPath, "/docs"},
+		ExemptPrefixes:  []string{"/docs/"},
 		ClientIP:        servermw.ClientIPConfig{Header: cfg.Server.ProxyHeader, TrustedProxies: cfg.Server.TrustedProxies},
 		RedisTimeout:    rl.RedisTimeout,
 		RedisRetryAfter: rl.RedisRetryAfter,
