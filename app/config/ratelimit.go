@@ -2,7 +2,9 @@ package config
 
 import "time"
 
-// RateLimitRule is one fixed budget: at most Max requests per Window for each client.
+// RateLimitRule is the budget of one route group for each client: a steady rate of Max requests per Window with a burst
+// of Max (GCRA), so a client can spend Max at once and then earns one back every Window/Max. It is not a cap per window:
+// any one Window can let through up to about 2×Max−1.
 type RateLimitRule struct {
 	Max    int
 	Window time.Duration
@@ -17,7 +19,8 @@ type RateLimitSettings struct {
 	Auth, Create, Redirect, Default RateLimitRule
 	// RedisTimeout bounds one limiter call to Redis.
 	RedisTimeout time.Duration
-	// RedisRetryAfter is the Retry-After the limiter advertises when it cannot reach Redis.
+	// RedisRetryAfter is the cooldown after a Redis error: how long the limiter decides requests in memory before asking
+	// Redis again. Clients never see it.
 	RedisRetryAfter time.Duration
 }
 

@@ -160,21 +160,21 @@ Liveness checks nothing. Readiness answers 503 when Postgres is down or the proc
 
 ### Rate limiting
 
-The limiter ([limiter.go](../app/pkg/infra/server/middleware/limiter.go), [limiter_redis.go](../app/pkg/infra/server/middleware/limiter_redis.go)) is a guard that runs right after authentication. The route groups are defined in [api/middleware/ratelimit.go](../app/api/middleware/ratelimit.go) and passed in from [main.go](../app/cmd/main.go), because `pkg` cannot import `api`. The first matching group limits the request. Every path is matched as Fiber routes it (lower case, trailing slashes trimmed).
+The limiter ([limiter.go](../app/pkg/infra/server/middleware/limiter.go), [limiter_redis.go](../app/pkg/infra/server/middleware/limiter_redis.go)) is a guard that runs right after authentication. The route groups are defined in [api/middleware/ratelimit.go](../app/api/middleware/ratelimit.go) and passed in from [main.go](../app/cmd/main.go), because `pkg` cannot import `api`. The first matching group limits the request. Groups match the path as Fiber routes it (lower case, trailing slashes trimmed); the exemptions match the path exactly.
 
 | Group | Matches | Key | Default |
 |---|---|---|---|
 | `auth` | any method under `/api/v1/fupi/auth/` | client IP | 10 per 60 s |
 | `create` | `POST /api/v1/fupi/urls` | user ID (IP if absent) | 30 per 60 s |
-| `redirect` | `GET /:code` | client IP | 300 per 60 s |
+| `redirect` | `GET` on a code-shaped path (`^/[a-zA-Z0-9-]{3,12}$`) | client IP | 300 per 60 s |
 | `default` | everything else | client IP | 100 per 60 s |
 
 `/health`, `/health/ready`, `/docs` and the prefix `/docs/` are exempt. A limited request gets `429`, `Retry-After`, `X-RateLimit-*` and `{"message":"too many requests"}`.
 
 - **Semantics:** a steady rate with a burst of `max` (GCRA through `redis_rate`), not a cap per clock window. A client spends `max` at once, then earns one request back every `window/max`. A span of one window can let through up to about `2×max − 1`.
 - **Counting:** one atomic Lua call per request in Redis, so instances share one count.
-- **Fallback:** each Redis call has a 50 ms budget. On an error the request is decided by an in-memory fixed window per instance, and Redis is not tried again for 5 s. With N instances the limit is up to N× during the outage. Redis stays optional ([ADR-0015](./adr/0015-postgres-is-the-only-required-dependency.md)).
-- **Client IP:** the connection address, unless `SERVER_PROXY_HEADER` is set and the peer is in `SERVER_TRUSTED_PROXIES`; then the rightmost address in the header that is not a trusted proxy ([client_ip.go](../app/pkg/infra/server/middleware/client_ip.go)).
+- **Fallback:** each Redis call has a budget, 50 ms by default. On an error the request is decided by an in-memory fixed window per instance, and Redis is not tried again for a cooldown, 5 s by default. After the cooldown one request at a time probes Redis while the rest stay in memory; a success switches back. With N instances the limit is up to N× during the outage. Redis stays optional ([ADR-0015](./adr/0015-postgres-is-the-only-required-dependency.md)).
+- **Client IP:** the connection address, unless `SERVER_PROXY_HEADER` is set and the peer is in `SERVER_TRUSTED_PROXIES`; then the rightmost address in the header that is not a trusted proxy, reading repeated header lines as one list ([client_ip.go](../app/pkg/infra/server/middleware/client_ip.go)). An IPv4 client is keyed by its address, an IPv6 client by its /64 (`ip:2001:db8:1:2::/64`), since one host usually holds a whole /64.
 - **Configuration:** `RATE_LIMIT_ENABLED`, `RATE_LIMIT_{AUTH,CREATE,REDIRECT,DEFAULT}_{MAX,WINDOW}` (windows in seconds), `RATE_LIMIT_REDIS_TIMEOUT_MS`, `RATE_LIMIT_REDIS_RETRY_AFTER` (seconds), `SERVER_PROXY_HEADER`, `SERVER_TRUSTED_PROXIES`. See [.env.example](../.env.example).
 - **Signals:** `http.ratelimit.requests` (`group`, `outcome`, `backend`), `http.ratelimit.backend.errors` and the gauge `http.ratelimit.fallback.active` (1 while in the fallback). The log lines `rate limiter falling back to memory` and `rate limiter back on redis` mark the switches. The request span carries the `ratelimit.*` attributes.
 
