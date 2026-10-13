@@ -230,6 +230,22 @@ infra.redis.cli: create.envfile ## Open redis-cli as the application user in clu
 infra.psql: create.envfile ## Open psql as the application user on the primary (MODE=ha or single)
 	@$(COMPOSE) --profile '*' exec $(POSTGRES_SERVICE) sh -c 'PGPASSWORD="$$PG_APP_PASSWORD" psql -h postgres -U "$$PG_APP_USER" "$$PG_DATABASE"'
 
+# pg_stat_statements is preloaded in both modes and the extension is created in the `postgres` database (deploy/postgres/roles.sh),
+# whose view covers every database. The superuser reads it: the application role lacks pg_read_all_stats.
+PG_ADMIN = $(COMPOSE) --profile '*' exec -T -e PGPASSWORD=$${PG_SUPERUSER_PASSWORD:-fupi-postgres-admin} $(POSTGRES_SERVICE) psql -h 127.0.0.1 -U postgres
+
+.PHONY: infra.pgstat
+infra.pgstat: create.envfile ## Top statements of the app database by total time (MODE=ha or single), usage make infra.pgstat TOP=10
+	@$(PG_ADMIN) -d postgres -c "SELECT calls, round(total_exec_time::numeric) AS total_ms, round(mean_exec_time::numeric,2) AS mean_ms, shared_blks_hit AS hit, shared_blks_read AS read, (wal_bytes/NULLIF(calls,0)) AS wal_per_call, left(regexp_replace(query,'\\s+',' ','g'),90) AS query FROM pg_stat_statements WHERE dbid = (SELECT oid FROM pg_database WHERE datname = '$${PG_DATABASE:-fupidb}') ORDER BY total_exec_time DESC LIMIT $(or $(TOP),10)"
+
+.PHONY: infra.pgstat.reset
+infra.pgstat.reset: create.envfile ## Reset pg_stat_statements, do it just before a load run (MODE=ha or single)
+	@$(PG_ADMIN) -d postgres -Atc "SELECT pg_stat_statements_reset()" >/dev/null && echo "pg_stat_statements reset"
+
+.PHONY: infra.psql.admin
+infra.psql.admin: create.envfile ## Open psql as the Postgres superuser on the app database, for EXPLAIN ANALYZE and locks (MODE=ha or single)
+	@$(COMPOSE) --profile '*' exec -e PGPASSWORD=$${PG_SUPERUSER_PASSWORD:-fupi-postgres-admin} $(POSTGRES_SERVICE) sh -c 'psql -h 127.0.0.1 -U postgres "$${PG_DATABASE:-fupidb}"'
+
 .PHONY: infra.migrate
 infra.migrate: create.envfile ## Re-run the database migrations against the running Postgres
 	@$(COMPOSE) --profile '*' run --rm migrate

@@ -69,6 +69,8 @@ Elasticsearch setup) has finished, or fails after five minutes and prints what i
 | `make infra.hosts` | print the `/etc/hosts` line needed for Redis HA from an app on your host |
 | `make infra.migrate` | re-run the database migrations |
 | `make infra.psql` | `psql` as the application user on the primary |
+| `make infra.psql.admin` | `psql` as the superuser on the app database (for `EXPLAIN ANALYZE`, locks) |
+| `make infra.pgstat [TOP=10]` / `infra.pgstat.reset` | top statements from `pg_stat_statements` / reset it; see [loadtest/README.md](../loadtest/README.md#diagnosing-a-slow-database) |
 | `make infra.redis.cli` | `redis-cli` as the application user, cluster mode |
 | `make infra.kafka.topics` | describe the Kafka topics |
 | `make infra.patroni.list` | Patroni members and roles (Postgres HA) |

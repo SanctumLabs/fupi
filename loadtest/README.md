@@ -106,3 +106,68 @@ the result.
 
 A threshold on `dropped_iterations` means k6 ran out of VUs while responses stalled: the offered load was not delivered,
 so the step is invalid even when latency looks fine.
+
+## Diagnosing a slow database
+
+When a scenario saturates (achieved rate below the offered rate, p50 climbing) find out which side is the limit before
+changing anything.
+
+1. **Who is busy.** `make infra.stats` shows CPU per container during the run. On the create path Postgres was at
+   ~120% CPU and the app at ~70%.
+2. **Which statements.** `pg_stat_statements` is preloaded in both modes (single: the `-c shared_preload_libraries`
+   flag, HA: `patroni.yml`) and the extension is created in the `postgres` database by `deploy/postgres/roles.sh`, so
+   it covers every database but must be read as the superuser:
+
+   ```bash
+   make infra.pgstat.reset MODE=single      # just before the run
+   make loadtest.run SCENARIO=create K6_ARGS="-e RATE=200 -e DURATION=60s"
+   make infra.pgstat MODE=single TOP=10     # calls, total/mean ms, buffer hits/reads, WAL bytes per call
+   ```
+
+   Compare `mean_ms` with what the statement costs alone (next step): a large gap means contention, not work.
+3. **What a statement costs alone.** `make infra.psql.admin` opens psql as the superuser. Wrap `EXPLAIN` in a
+   transaction you roll back, because `ANALYZE` really runs the statement:
+
+   ```sql
+   BEGIN;
+   EXPLAIN (ANALYZE, BUFFERS)
+   INSERT INTO urls (id, user_id, short_code, original_url, status, expires_on)
+   SELECT gen_random_uuid(), id, 'xx' || substr(md5(random()::text), 1, 8),
+          'https://example.com/explain/' || md5(random()::text), 'ACTIVE', now() + interval '30 days'
+   FROM users LIMIT 1;
+   ROLLBACK;
+   ```
+
+   The plan ends with the time spent in triggers and foreign-key checks. The first run is cold (planning, cache
+   misses): repeat it, or loop 300 inserts in a `DO` block and divide.
+4. **What it is waiting for.** While the load runs, sample `pg_stat_activity`:
+
+   ```sql
+   SELECT coalesce(wait_event_type,'cpu') || ':' || coalesce(wait_event,'-') AS waiting_on, count(*)
+   FROM pg_stat_activity WHERE datname = 'fupidb' AND state = 'active' AND pid <> pg_backend_pid()
+   GROUP BY 1 ORDER BY 2 DESC;
+   ```
+
+   Run it every second or so and add up the samples. `LWLock:BufferContent` and `LWLock:LockManager` mean many
+   backends fight over the same pages or locks; `IO:WalSync` is commit latency.
+
+The application role cannot read `pg_stat_statements` (it lacks `pg_read_all_stats`); the HA targets use the same
+commands through `patroni-1` and have not been tried.
+
+## Findings: the create path (single mode, one laptop)
+
+Measured with `make loadtest.stress SCENARIO=create`, 3 runs per step, 5% dropped-iteration budget.
+
+| What was checked | Result |
+|---|---|
+| Short-code sequence | Not the bottleneck. The generator claims blocks of 1000 codes, so 61,744 creates made 64 `nextval` calls at 1.7ms each. |
+| Outbox insert (`outbox_events`) | Cheap: 0.15-0.8ms mean and about 1.1KB of WAL, a small share of a create. |
+| Uniqueness checks and indexes | 6 indexes (3 unique) on `urls`. Alone, an insert costs 0.07ms with the audit trigger disabled, so the indexes are not expensive by themselves. |
+| `INSERT INTO urls` under load | Dominates: 3-6ms mean under load against 0.26ms alone, about 2-3.7KB of WAL per call. The gap is contention: `LWLock:BufferContent` in about half of the samples, then `LockManager`, `WalSync` and `WALWrite`. |
+| Audit trigger on `urls` (`create_log_on_modify`) | Writes a ~1.7KB row to `audit_trail`, which has 5 indexes including two GIN indexes. Costs 0.19ms of the 0.26ms warm insert. Disabling it moved the passing ceiling from about 250 to about 350 creates/s (fails at 300 and 400 respectively) in one A/B run. |
+
+So the create ceiling on this machine is about 250 creates/s with the audit trigger and about 350 without it, and the
+audit write (heap plus GIN indexes on the hottest table) is the first thing to look at. An earlier run measured the ceiling
+at about 150/s, so treat these as indicative: they vary between runs and with the state of the database.
+Whether the trigger can be made cheaper (drop the GIN indexes, write the audit row asynchronously) is a product
+decision, not made here.
