@@ -57,6 +57,8 @@ func TestRateLimitGroups_Routing(t *testing.T) {
 		{http.MethodPost, testBaseURI + "/auth/login/", "auth"},
 		{http.MethodPost, "/API/v1/fupi/AUTH/login", "auth"},
 		{http.MethodGet, "/ABC123/", "redirect"},
+		{http.MethodPost, testBaseURI + "/urls//", "create"},
+		{http.MethodGet, "/abc123//", "redirect"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {

@@ -55,11 +55,11 @@ func RateLimitGroups(baseURI string, redirect *regexp.Regexp, rules RateLimitRul
 	}
 }
 
-// routedPath is the request path as Fiber routes it: lower case, without a trailing slash (the root stays "/").
+// routedPath is the request path as Fiber routes it: lower case, without trailing slashes (the root stays "/").
 func routedPath(c *fiber.Ctx) string {
-	path := strings.ToLower(c.Path())
-	if len(path) > 1 {
-		path = strings.TrimSuffix(path, "/")
+	path := strings.TrimRight(strings.ToLower(c.Path()), "/")
+	if path == "" {
+		return "/"
 	}
 	return path
 }
