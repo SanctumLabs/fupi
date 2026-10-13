@@ -13,7 +13,7 @@
 - **Tokens expire after 15 minutes, refresh tokens after 24 hours.** Any run longer than 15 minutes (load, soak) must refresh. Logging in every iteration is wrong: password hashing is deliberately CPU-expensive and would measure bcrypt, not the system.
 - **Redirect is public** (`GET /{code}`, no auth). Only the `/api/v1/fupi/urls` management routes need a token.
 - **Redirects publish `URLAccessed` to Kafka best-effort** (ADR-0021). A full buffer drops visits instead of slowing the request, so a drop counter is a required signal, not just latency.
-- **No HTTP rate limiter was found in the app.** The load generator will not be throttled by the API. If one is added later, tests need an allowlist or a higher limit.
+- **The API rate limits per client IP** (auth, create, redirect and default route groups), so one generator would be throttled. Load runs start the API with `make loadtest.app.up`, which exports `LOADTEST_LIMITS` (the `RATE_LIMIT_<GROUP>_MAX` / `_WINDOW` env overrides, set far above the load) instead of an allowlist. The `ratelimit` scenario checks the limiter itself, with a small redirect limit.
 - **Safe Browsing** is called on `URLCreated` (ADR-0022). Leave `SAFE_BROWSING_API_KEY` unset (or point it at a stub) so a load run never spends real quota.
 - The Compose stack publishes the API on `127.0.0.1:8085`; infra is started with `make infra.<stack>.up MODE=single|ha`.
 
@@ -50,6 +50,7 @@ Open question: whether a refresh rotates the refresh token. The auth helper must
 | `redirect` | `constant-arrival-rate` (open model) | Zipf-skewed codes (s≈1.0) so a few are hot. Add 5% unknown codes for the 404 path and a first-hit warm-up phase for cache misses |
 | `create` | `constant-arrival-rate` | Unique `original_url` and alias per request. 201 rate, duplicate (409) handling, DB write latency |
 | `mixed` | several `constant-arrival-rate` scenarios in parallel | Realistic interference: creates and updates while redirects run |
+| `ratelimit` | one VU, one iteration | `GROUP_MAX + 20` requests to an unknown code. At least `GROUP_MAX` allowed (404), no more than `GROUP_MAX` plus the window's refill, some 429s, each with `Retry-After` and `X-RateLimit-Limit`. Needs the API started with a small redirect limit |
 
 Open-model executors are used for everything so a slow server does not reduce the offered load (avoids coordinated omission).
 

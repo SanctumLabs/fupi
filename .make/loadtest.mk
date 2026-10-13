@@ -17,6 +17,11 @@ REPEATS ?= 3
 K6_CPUS ?=
 USERS ?= 5
 URLS_PER_USER ?= 20
+# Limits the API runs with during load tests, so the rate limiter does not throttle the generator. Windows are seconds.
+LOADTEST_LIMITS ?= RATE_LIMIT_AUTH_MAX=100000 RATE_LIMIT_CREATE_MAX=100000 RATE_LIMIT_REDIRECT_MAX=1000000 RATE_LIMIT_DEFAULT_MAX=100000
+# The ratelimit scenario's view of the redirect group: keep these equal to RATE_LIMIT_REDIRECT_MAX and _WINDOW.
+GROUP_MAX ?= 100000
+GROUP_WINDOW_S ?= 60
 
 # --user keeps the seed file owned by the caller on Linux hosts.
 K6_RUN = docker run --rm -i --network $(K6_NETWORK) --user "$$(id -u):$$(id -g)" \
@@ -43,3 +48,11 @@ loadtest.run: ## Runs a scenario, usage make loadtest.run SCENARIO=redirect K6_A
 .PHONY: loadtest.stress
 loadtest.stress: ## Steps the arrival rate up until a threshold fails, usage make loadtest.stress SCENARIO=redirect START=100 STEP=100 MAX=5000 STEP_DURATION=45s REPEATS=3 K6_CPUS=2
 	@SCENARIO=$(SCENARIO) START=$(START) STEP=$(STEP) MAX=$(MAX) STEP_DURATION=$(STEP_DURATION) REPEATS=$(REPEATS) $(ROOT_DIR)/loadtest/stress.sh
+
+.PHONY: loadtest.app.up
+loadtest.app.up: ## Starts the API with load-test rate limits, usage make loadtest.app.up MODE=single LOADTEST_LIMITS="RATE_LIMIT_REDIRECT_MAX=200 RATE_LIMIT_REDIRECT_WINDOW=3600"
+	env $(LOADTEST_LIMITS) $(MAKE) infra.app.up MODE=$(MODE)
+
+.PHONY: loadtest.ratelimit
+loadtest.ratelimit: ## Checks the redirect rate limit, usage make loadtest.ratelimit GROUP_MAX=200 GROUP_WINDOW_S=3600 (the API must run with the same limit)
+	$(K6_RUN) -e GROUP_MAX=$(GROUP_MAX) -e GROUP_WINDOW_S=$(GROUP_WINDOW_S) $(K6_IMAGE) run /loadtest/scenarios/ratelimit.js
