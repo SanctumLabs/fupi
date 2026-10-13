@@ -16,10 +16,13 @@ import (
 // redisRateLimiter is a limiter.LimiterHandler deciding requests with redis_rate, so all instances share one bucket per
 // key. While Redis is failing, requests are decided by fiber's in-memory fixed window instead.
 type redisRateLimiter struct {
+	// group is the name of the group this limiter decides for, to label its telemetry.
+	group   string
 	redis   RateAllower
 	timeout time.Duration
 	now     func() time.Time
 	backend *rateLimitBackend
+	metrics *limiterMetrics
 }
 
 // New returns the handler for one group. The in-memory fallback is built here, once per group.
@@ -30,16 +33,18 @@ func (r *redisRateLimiter) New(cfg limiter.Config) fiber.Handler {
 
 	return func(c *fiber.Ctx) error {
 		now := r.now()
+		key := cfg.KeyGenerator(c)
 		if !r.backend.useRedis(now) {
-			return fallback(c)
+			return r.metrics.inMemory(c, fallback, r.group, key)
 		}
 
 		ctx, cancel := context.WithTimeout(c.UserContext(), r.timeout)
-		res, err := r.redis.Allow(ctx, cfg.KeyGenerator(c), limit)
+		res, err := r.redis.Allow(ctx, key, limit)
 		cancel()
 		if err != nil {
 			r.backend.failed(c.UserContext(), now, err)
-			return fallback(c)
+			r.metrics.backendError(c.UserContext(), r.group)
+			return r.metrics.inMemory(c, fallback, r.group, key)
 		}
 		r.backend.succeeded(c.UserContext(), now)
 
@@ -47,7 +52,9 @@ func (r *redisRateLimiter) New(cfg limiter.Config) fiber.Handler {
 		c.Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
 		c.Set("X-RateLimit-Reset", strconv.Itoa(ceilSeconds(res.ResetAfter)))
 
-		if res.Allowed == 0 {
+		limited := res.Allowed == 0
+		r.metrics.decided(c, r.group, key, backendRedis, limited, res.Remaining)
+		if limited {
 			c.Set(fiber.HeaderRetryAfter, strconv.Itoa(max(1, ceilSeconds(res.RetryAfter))))
 			return cfg.LimitReached(c)
 		}
