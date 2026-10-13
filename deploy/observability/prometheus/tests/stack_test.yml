@@ -194,3 +194,33 @@ tests:
       - eval_time: 16m
         alertname: UrlExpiryStalled
         exp_alerts: []
+
+  - name: The rate limiter has been on its in-memory fallback for more than five minutes
+    interval: 1m
+    input_series:
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi",host_name="api-a"}', values: "1x10"}
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi",host_name="api-b"}', values: "0x10"}
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: RateLimiterOnFallback
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "The API has been rate limiting in memory for 5 minutes because Redis fails; limits are per instance"}
+
+  - name: A short rate limiter fallback does not alert
+    interval: 1m
+    input_series:
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi"}', values: "0 0 1 1 1 0 0 0 0 0"}
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: RateLimiterOnFallback
+        exp_alerts: []
+
+  - name: The rate limiter on Redis does not alert
+    interval: 1m
+    input_series:
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi"}', values: "0x10"}
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: RateLimiterOnFallback
+        exp_alerts: []

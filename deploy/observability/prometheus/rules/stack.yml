@@ -90,3 +90,14 @@ groups:
           severity: warning
         annotations:
           summary: The URL expiry job has not completed a run for more than 10 minutes
+
+      # Fed by the API's rate limiter (OpenTelemetry, via the collector). An instance reports 1 while Redis fails and it
+      # limits requests in memory, on its own count, so N instances let up to N times the limit through. Silent when the
+      # limiter runs without Redis or is off: the series is 0 or absent.
+      - alert: RateLimiterOnFallback
+        expr: max(http_ratelimit_fallback_active{service_name="fupi"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The API has been rate limiting in memory for 5 minutes because Redis fails; limits are per instance
