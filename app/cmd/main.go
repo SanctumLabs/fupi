@@ -224,8 +224,10 @@ func run(ctx context.Context, cfg config.App) error {
 
 	tokenService := jwtauth.NewTokenService(cfg.Auth, jwt.New())
 
-	// No email transport is configured yet, so verification links are logged rather than sent.
-	notifier := notifications.NewEmailNotifier(cfg.Server.BaseURL, notifications.NewLoggingEmailSender())
+	// No email transport is configured yet, so emails are logged rather than sent. The verification link carries a live
+	// token, so the body is logged only in development and test.
+	notifier := notifications.NewEmailNotifier(cfg.Server.BaseURL+baseURI,
+		notifications.NewLoggingEmailSender(config.IsDevelopmentOrTest(cfg.Environment)))
 
 	identityService := identityapp.NewService(
 		identitydatastore.NewUserDatastoreAdapter(dbClient, dbConfig),

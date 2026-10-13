@@ -102,8 +102,13 @@ func (r *reader) port(key, value string) {
 // enforceSecrets is true for every environment except development and test (spec D6), so a forgotten variable in
 // a real deployment fails at boot instead of running with a development default.
 func (r *reader) enforceSecrets() bool {
-	environment := r.str("ENVIRONMENT", environmentDevelopment)
-	return environment != environmentDevelopment && environment != environmentTest
+	return !IsDevelopmentOrTest(r.str("ENVIRONMENT", environmentDevelopment))
+}
+
+// IsDevelopmentOrTest reports whether environment is development or test, the environments where development defaults
+// are accepted and a developer may see what production keeps out of the log.
+func IsDevelopmentOrTest(environment string) bool {
+	return environment == environmentDevelopment || environment == environmentTest
 }
 
 func (r *reader) fail(format string, args ...any) {

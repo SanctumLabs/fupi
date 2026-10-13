@@ -276,5 +276,5 @@ These are true of the code today and are worth knowing before changing it:
   - `internal/adapters/jwtauth` imports `app/config`.
 - **Packages no binary imports:** `pkg/infra/{queue,queue/inmem,scheduler,clients/grpc,config,env,monitoring}`, `pkg/encoding`, `pkg/utils/time`, `internal/pkg/utils` and `internal/core/ports`. Similarly, `pkg/infra/server/grpc_server.go` exists, but no process serves gRPC.
 - **Tables with generated queries but no adapter:** `api_keys`, `webhooks` and `audit_trail` are in the schema and have sqlc queries, but nothing outside `postgres/sql` uses them.
-- **No email transport:** verification emails are written to the log by `LoggingEmailSender` ([ADR-0009](./adr/0009-identity-notification-and-login-policy.md)).
+- **No email transport:** verification emails are written to the log by `LoggingEmailSender` ([ADR-0009](./adr/0009-identity-notification-and-login-policy.md)). The body, which holds the verification link and its token, is logged only when `ENVIRONMENT` is `development` or `test`.
 - **No GeoIP database:** `url.accessed` carries an empty country code (`geolocation.Unknown`).

@@ -1,8 +1,10 @@
 package notifications
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -62,6 +64,35 @@ func TestEmailNotifier_SendEmailVerification(t *testing.T) {
 func TestLoggingEmailSender_DoesNotFail(t *testing.T) {
 	// The logging sender stands in for a real transport; registration must not break because
 	// no transport is configured.
-	err := NewLoggingEmailSender().SendEmail(context.Background(), "user@fupi.com", "subject", "body")
+	err := NewLoggingEmailSender(false).SendEmail(context.Background(), "user@fupi.com", "subject", "body")
 	assert.NoError(t, err)
+}
+
+// captureDefaultLog sends the default logger to a buffer for the rest of the test.
+func captureDefaultLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &buf
+}
+
+func TestLoggingEmailSender_LogsTheBodyOnlyWhenAsked(t *testing.T) {
+	t.Run("logs the body, so a developer can follow the verification link", func(t *testing.T) {
+		buf := captureDefaultLog(t)
+
+		require.NoError(t, NewLoggingEmailSender(true).SendEmail(context.Background(), "user@fupi.com", "subject", "the link"))
+
+		assert.Contains(t, buf.String(), `"body":"the link"`)
+	})
+
+	t.Run("leaves the body out, because it carries a live verification token", func(t *testing.T) {
+		buf := captureDefaultLog(t)
+
+		require.NoError(t, NewLoggingEmailSender(false).SendEmail(context.Background(), "user@fupi.com", "subject", "the link"))
+
+		assert.Contains(t, buf.String(), "user@fupi.com")
+		assert.NotContains(t, buf.String(), "the link")
+	})
 }
