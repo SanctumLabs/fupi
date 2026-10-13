@@ -54,11 +54,28 @@ type RateLimiterConfig struct {
 	RedisTimeout    time.Duration
 	RedisRetryAfter time.Duration
 	MeterProvider   metric.MeterProvider
+
+	// now is the clock deciding when Redis is retried; nil means time.Now. Tests replace it.
+	now func() time.Time
 }
 
 // RateLimiterMiddleware limits requests per client with the first group matching the request. A client over the limit
 // gets a 429 response.
 func RateLimiterMiddleware(cfg RateLimiterConfig) (fiber.Handler, error) {
+	var algorithm limiter.LimiterHandler
+	if cfg.Redis != nil {
+		now := cfg.now
+		if now == nil {
+			now = time.Now
+		}
+		algorithm = &redisRateLimiter{
+			redis:   cfg.Redis,
+			timeout: cfg.RedisTimeout,
+			now:     now,
+			backend: newRateLimitBackend(cfg.RedisRetryAfter),
+		}
+	}
+
 	limiters := make([]fiber.Handler, len(cfg.Groups))
 	for i, group := range cfg.Groups {
 		if group.Name == "" {
@@ -67,7 +84,7 @@ func RateLimiterMiddleware(cfg RateLimiterConfig) (fiber.Handler, error) {
 		if group.Rule.Max <= 0 || group.Rule.Window <= 0 {
 			return nil, fmt.Errorf("rate limit group %q needs a positive max and window", group.Name)
 		}
-		limiters[i] = newGroupLimiter(group, cfg.ClientIP)
+		limiters[i] = newGroupLimiter(group, cfg.ClientIP, algorithm)
 	}
 
 	return func(c *fiber.Ctx) error {
@@ -85,10 +102,12 @@ func RateLimiterMiddleware(cfg RateLimiterConfig) (fiber.Handler, error) {
 	}, nil
 }
 
-func newGroupLimiter(group RateLimitGroup, clientIP ClientIPConfig) fiber.Handler {
+// newGroupLimiter builds the limiter of one group. A nil algorithm means fiber's in-memory fixed window.
+func newGroupLimiter(group RateLimitGroup, clientIP ClientIPConfig, algorithm limiter.LimiterHandler) fiber.Handler {
 	return limiter.New(limiter.Config{
-		Max:        group.Rule.Max,
-		Expiration: group.Rule.Window,
+		Max:               group.Rule.Max,
+		Expiration:        group.Rule.Window,
+		LimiterMiddleware: algorithm,
 		KeyGenerator: func(c *fiber.Ctx) string {
 			var key string
 			if group.Key != nil {
@@ -100,10 +119,13 @@ func newGroupLimiter(group RateLimitGroup, clientIP ClientIPConfig) fiber.Handle
 			return group.Name + ":" + key
 		},
 		LimitReached: func(c *fiber.Ctx) error {
-			// Fiber sets Retry-After before calling this, but sets the X-RateLimit-* headers only on allowed requests.
-			c.Set("X-RateLimit-Limit", strconv.Itoa(group.Rule.Max))
-			c.Set("X-RateLimit-Remaining", "0")
-			c.Set("X-RateLimit-Reset", c.GetRespHeader(fiber.HeaderRetryAfter))
+			// Fiber's fixed window sets Retry-After before calling this, but sets the X-RateLimit-* headers only on allowed
+			// requests. The Redis limiter has already set all of them.
+			if c.GetRespHeader("X-RateLimit-Limit") == "" {
+				c.Set("X-RateLimit-Limit", strconv.Itoa(group.Rule.Max))
+				c.Set("X-RateLimit-Remaining", "0")
+				c.Set("X-RateLimit-Reset", c.GetRespHeader(fiber.HeaderRetryAfter))
+			}
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"message": LimitedMessage})
 		},
 	})
