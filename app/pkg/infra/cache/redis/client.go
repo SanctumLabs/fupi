@@ -47,6 +47,9 @@ func NewRedisClient(config RedisClientConfig) (cache.CacheClient, error) {
 		Password:   config.Password,
 		DB:         config.Database,
 		MasterName: config.MasterName,
+		// Without it go-redis ignores a context deadline and waits for its own read timeout, so a caller cannot bound
+		// a command on a hung Redis.
+		ContextTimeoutEnabled: true,
 	})
 
 	// A span and a metric per command. The command text is switched off: keys and values can hold URLs and tokens (D7).
@@ -124,4 +127,14 @@ func (rc *redisClient) Exists(ctx context.Context, key string) bool {
 func (rc *redisClient) Delete(ctx context.Context, key string) error {
 	statusCmd := rc.client.Del(ctx, key)
 	return statusCmd.Err()
+}
+
+// UniversalClient returns the go-redis client behind a cache client built by NewRedisClient, for callers that need
+// commands the cache interface does not offer. It reports false for any other cache client.
+func UniversalClient(client cache.CacheClient) (redisGo.UniversalClient, bool) {
+	rc, ok := client.(*redisClient)
+	if !ok {
+		return nil, false
+	}
+	return rc.client, true
 }

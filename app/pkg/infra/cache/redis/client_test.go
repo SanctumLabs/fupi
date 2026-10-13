@@ -37,3 +37,29 @@ func TestNewRedisClient_PicksTheClientTypeFromTheAddressCount(t *testing.T) {
 	require.NoError(t, err)
 	assert.IsType(t, &redisGo.ClusterClient{}, cluster.(*redisClient).client)
 }
+
+func TestUniversalClient_ExposesTheClientOfThisPackage(t *testing.T) {
+	client, err := NewRedisClient(RedisClientConfig{Address: []string{"localhost:7001"}})
+	require.NoError(t, err)
+
+	universal, ok := UniversalClient(client)
+
+	require.True(t, ok)
+	assert.Same(t, client.(*redisClient).client, universal)
+}
+
+func TestUniversalClient_ReportsAForeignCacheClient(t *testing.T) {
+	universal, ok := UniversalClient(nil)
+
+	assert.False(t, ok)
+	assert.Nil(t, universal)
+}
+
+// Without ContextTimeoutEnabled go-redis ignores the deadline of a command's context, so a caller's timeout on a hung
+// Redis would last as long as the client's read timeout.
+func TestNewRedisClient_HonoursContextDeadlines(t *testing.T) {
+	client, err := NewRedisClient(RedisClientConfig{Address: []string{"localhost:7001"}})
+	require.NoError(t, err)
+
+	assert.True(t, client.(*redisClient).client.(*redisGo.Client).Options().ContextTimeoutEnabled)
+}
