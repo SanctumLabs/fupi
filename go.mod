@@ -7,6 +7,7 @@ require (
 	github.com/exaring/otelpgx v0.12.0
 	github.com/go-faker/faker/v4 v4.7.0
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
+	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/gofiber/contrib/swagger v1.3.0
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/golang-jwt/jwt v3.2.2+incompatible
