@@ -31,6 +31,10 @@ wire: # Generate dependency injection instances with wire
 	cd internal/app && wire
 	@echo "${GREEN} Done generating dependency injection instances ${NC}"
 
+.PHONY: setup.actionlint
+setup.actionlint: ## Will setup actionlint for linting GitHub Actions workflows
+	@echo "${GREEN} Setting up actionlint ${NC}"
+	go install github.com/rhysd/actionlint/cmd/actionlint@latest
 
 ################################################## Protobuf Commands ########################################################
 

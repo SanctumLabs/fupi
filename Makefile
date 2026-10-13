@@ -15,3 +15,9 @@ include $(ROOT_DIR)/.make/dev.mk
 
 # test commands
 include $(ROOT_DIR)/.make/test.mk
+
+# CI commands
+include $(ROOT_DIR)/.make/ci.mk
+
+# load test commands
+include $(ROOT_DIR)/.make/loadtest.mk
