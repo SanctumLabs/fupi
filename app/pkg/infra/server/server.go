@@ -43,7 +43,7 @@ func NewServer(cfg ServerConfig) *Server {
 	app.Use(middleware.AccessLogMiddleware(cfg.ProbePaths))
 	app.Use(middleware.CORSMiddleware())
 
-	// The spec is generated from the handler annotations and embedded (ADR-0019). The docs sit before the auth middleware,
+	// The spec is generated from the handler annotations and embedded (ADR-0023). The docs sit before the auth middleware,
 	// which is added later, so they are public. The swagger middleware matches /docs exactly, hence the rewrite of /docs/.
 	app.Use(func(ctx *fiber.Ctx) error {
 		if ctx.Path() == "/docs/" {

@@ -7,10 +7,10 @@ app = "fupi"
   strategy = "bluegreen"
 
 [env]
-  ENV = "release"
-  LOG_JSON_OUTPUT = true
+  ENVIRONMENT = "production"
+  LOG_FORMAT = "json"
   LOG_LEVEL = "info"
-  PORT = 8085
+  HTTP_PORT = 8085
 
 [[services]]
   internal_port = 8085

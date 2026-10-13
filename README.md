@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/github/v/release/sanctumlabs/fupi?color=%235351FB&label=version)](https://github.com/sanctumlabs/fupi/releases)
 [![CI](https://github.com/sanctumlabs/fupi/actions/workflows/ci.yml/badge.svg)](https://github.com/sanctumlabs/fupi/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sanctumlabs/fupi/branch/develop/graph/badge.svg?token=RNg0UoESug)](https://codecov.io/gh/sanctumlabs/fupi)
-[![Go](https://img.shields.io/badge/Go-1.18-blue.svg)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.0-blue.svg)](https://go.dev/)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/be035defd2d44675bddf744a88d1a2d5)](https://www.codacy.com/gh/SanctumLabs/fupi/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=SanctumLabs/fupi&amp;utm_campaign=Badge_Grade)
 
 Simple URL Shortner Service
@@ -13,7 +13,7 @@ Simple URL Shortner Service
 
 Ensure you have the following setup on you local development environment:
 
-### [Go 1.25](https://go.dev/)
+### [Go 1.26](https://go.dev/)
 
 This is the programming language used to build the application. You will require this installed in order to install dependencies and run the application.
 
@@ -33,10 +33,10 @@ go mod download
 
 > Either option will work to setup the dependencies
 
-Second, setup the environmant variables that the application will use. There are some defaults set up in [.env.sample](./.env.sample) and they can be used to setup the environment variables specific to how you want the application to run.
+Second, setup the environmant variables that the application will use. There are some defaults set up in [.env.example](./.env.example) and they can be used to setup the environment variables specific to how you want the application to run.
 
 ```bash
-cp .env.sample .env
+cp .env.example .env
 ```
 
 > This will copy over those environment variables. Afterwards, you can set them up accordingly.

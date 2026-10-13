@@ -68,7 +68,7 @@ jobs:
       database-port: 5432
       database-port-internal: 5432
 
-  # The OpenAPI spec is generated from the handler annotations (ADR-0019): fail when the committed copy is stale.
+  # The OpenAPI spec is generated from the handler annotations (ADR-0023): fail when the committed copy is stale.
   openapi:
     name: OpenAPI spec is up to date
     needs: lint
