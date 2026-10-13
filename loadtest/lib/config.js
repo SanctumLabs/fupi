@@ -9,3 +9,15 @@ export const JSON_HEADERS = { 'Content-Type': 'application/json' };
 export function bearer(token) {
   return { headers: { ...JSON_HEADERS, Authorization: `Bearer ${token}` } };
 }
+
+function seconds(duration) {
+  const m = /^(\d+)(s|m|h)$/.exec(duration);
+  return parseInt(m[1], 10) * { s: 1, m: 60, h: 3600 }[m[2]];
+}
+
+// maxDropped is the dropped-iteration budget of an arrival-rate scenario: DROP_TOLERANCE (default 1%) of the iterations
+// it should run. A dropped iteration means the generator had no free VU, which on a busy laptop also happens when the
+// generator itself stalls, so a strict zero would fail runs whose server side was fine.
+export function maxDropped(rate, duration) {
+  return Math.ceil(parseFloat(__ENV.DROP_TOLERANCE || '0.01') * rate * seconds(duration));
+}

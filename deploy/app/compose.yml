@@ -1,6 +1,7 @@
 # The API container (see docs/LocalInfrastructure.md). One service per mode; both build the repository Dockerfile.
-#   app-ha      REDIS_ADDRESS lists all six cluster nodes.
-#   app-single  REDIS_ADDRESS is the single node (it answers to the alias redis-1).
+#   app-ha      REDIS_ADDRESS lists all six cluster nodes; KAFKA_BROKERS the three brokers.
+#   app-single  REDIS_ADDRESS is the single node (it answers to the alias redis-1); KAFKA_BROKERS the single broker (alias kafka-1).
+# Kafka is optional for the API (ADR-0021), but without brokers every URLAccessed publish times out and is dropped.
 # The services declare no depends_on: a dependency in a profile that is not enabled makes `docker compose config` fail,
 # so scripts/infra.sh brings up and waits for Postgres and Redis first, and restart: unless-stopped covers a manual start.
 # The environment is an explicit list, not env_file: the app must not see the other stacks' admin passwords.
@@ -35,6 +36,8 @@ x-app-env: &app-env
   SHORT_CODE_KEY: ${SHORT_CODE_KEY:-fupi-short-code-key-for-development-only}
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
   OTEL_SERVICE_NAME: fupi
+  # the rate limiter is on unless a run (make loadtest.stress) turns it off
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
 
 services:
   app-ha:
@@ -43,6 +46,7 @@ services:
     environment:
       <<: *app-env
       REDIS_ADDRESS: redis-1:7001,redis-2:7002,redis-3:7003,redis-4:7004,redis-5:7005,redis-6:7006
+      KAFKA_BROKERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
 
   app-single:
     <<: *app
@@ -50,6 +54,7 @@ services:
     environment:
       <<: *app-env
       REDIS_ADDRESS: redis-1:7001
+      KAFKA_BROKERS: kafka-1:9092
 
 networks:
   fupi:

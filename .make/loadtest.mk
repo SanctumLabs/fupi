@@ -12,11 +12,15 @@ START ?= 100
 STEP ?= 100
 MAX ?= 5000
 STEP_DURATION ?= 45s
+REPEATS ?= 3
+# Cap on the generator's CPUs (empty = no cap). GOMAXPROCS follows it so the Go runtime does not run into CFS throttling.
+K6_CPUS ?=
 USERS ?= 5
 URLS_PER_USER ?= 20
 
 # --user keeps the seed file owned by the caller on Linux hosts.
 K6_RUN = docker run --rm -i --network $(K6_NETWORK) --user "$$(id -u):$$(id -g)" \
+	$(if $(K6_CPUS),--cpus $(K6_CPUS) -e GOMAXPROCS=$(K6_CPUS)) \
 	-v "$(ROOT_DIR)/loadtest:/loadtest" \
 	-e BASE_URL=$(LOADTEST_BASE_URL) -e USERS=$(USERS) -e URLS_PER_USER=$(URLS_PER_USER) $(K6_ARGS)
 
@@ -37,5 +41,5 @@ loadtest.run: ## Runs a scenario, usage make loadtest.run SCENARIO=redirect K6_A
 	$(K6_RUN) $(K6_IMAGE) run $(K6_FLAGS) /loadtest/scenarios/$(SCENARIO).js
 
 .PHONY: loadtest.stress
-loadtest.stress: ## Steps the arrival rate up until a threshold fails, usage make loadtest.stress SCENARIO=redirect START=100 STEP=100 MAX=5000 STEP_DURATION=45s
-	@SCENARIO=$(SCENARIO) START=$(START) STEP=$(STEP) MAX=$(MAX) STEP_DURATION=$(STEP_DURATION) $(ROOT_DIR)/loadtest/stress.sh
+loadtest.stress: ## Steps the arrival rate up until a threshold fails, usage make loadtest.stress SCENARIO=redirect START=100 STEP=100 MAX=5000 STEP_DURATION=45s REPEATS=3 K6_CPUS=2
+	@SCENARIO=$(SCENARIO) START=$(START) STEP=$(STEP) MAX=$(MAX) STEP_DURATION=$(STEP_DURATION) REPEATS=$(REPEATS) $(ROOT_DIR)/loadtest/stress.sh

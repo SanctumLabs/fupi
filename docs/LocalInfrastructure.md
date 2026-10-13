@@ -224,7 +224,7 @@ What to know:
 
 - HA: `kafka-1..3` in KRaft mode, each both broker and controller; replication factor 3, `min.insync.replicas=2`.
   Single: `kafka-single` (alias `kafka-1`), replication factor 1.
-- Topics are created at start-up and are idempotent: `url.events`, `identity.events`, `url.access`, `url.invalidations`,
+- Topics are created at start-up and are idempotent: `url.events`, `identity.events`, `url.accessed`, `url.invalidations`,
   `security.scan.requests`, `webhook.deliveries`. Auto-creation is off.
 - Kafka UI: <http://localhost:8080>. Describe topics with `make infra.kafka.topics`.
 - No authentication or TLS locally.

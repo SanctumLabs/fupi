@@ -13,7 +13,7 @@ KT=/opt/kafka/bin/kafka-topics.sh
 TOPICS=(
   "url.events:3:604800000"
   "identity.events:3:604800000"
-  "url.access:6:172800000"
+  "url.accessed:6:172800000"
   "url.invalidations:3:3600000"
   "security.scan.requests:3:86400000"
   "webhook.deliveries:3:259200000"

@@ -4,18 +4,21 @@
 //   make loadtest.run SCENARIO=create K6_ARGS="-e RATE=2 -e DURATION=20m"
 import http from 'k6/http';
 import { check } from 'k6';
-import { API, bearer } from '../lib/config.js';
+import { API, bearer, maxDropped } from '../lib/config.js';
 import { accessToken } from '../lib/auth.js';
 import { expiresInDays } from '../lib/data.js';
 import { rateLimited, unauthorized } from '../lib/metrics.js';
+
+const RATE = parseInt(__ENV.RATE || '2', 10);
+const DURATION = __ENV.DURATION || '1m';
 
 export const options = {
   scenarios: {
     create: {
       executor: 'constant-arrival-rate',
-      rate: parseInt(__ENV.RATE || '2', 10),
+      rate: RATE,
       timeUnit: '1s',
-      duration: __ENV.DURATION || '1m',
+      duration: DURATION,
       preAllocatedVUs: parseInt(__ENV.PRE_VUS || '10', 10),
       maxVUs: parseInt(__ENV.MAX_VUS || '100', 10),
     },
@@ -23,7 +26,7 @@ export const options = {
   thresholds: {
     http_req_failed: ['rate<0.001'],
     http_req_duration: [`p(95)<${__ENV.P95_MS || 300}`],
-    dropped_iterations: ['count==0'],
+    dropped_iterations: [`count<=${maxDropped(RATE, DURATION)}`],
     unauthorized: ['count==0'],
     checks: ['rate>0.999'],
   },

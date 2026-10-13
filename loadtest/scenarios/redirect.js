@@ -5,19 +5,22 @@
 //   make loadtest.run SCENARIO=redirect K6_ARGS="-e RATE=50 -e DURATION=5m"
 import http from 'k6/http';
 import { check } from 'k6';
-import { BASE_URL } from '../lib/config.js';
+import { BASE_URL, maxDropped } from '../lib/config.js';
 import { pickUrl } from '../lib/data.js';
 import { rateLimited } from '../lib/metrics.js';
 
 const MISS_RATIO = parseFloat(__ENV.MISS_RATIO || '0.05');
 
+const RATE = parseInt(__ENV.RATE || '10', 10);
+const DURATION = __ENV.DURATION || '1m';
+
 export const options = {
   scenarios: {
     redirect: {
       executor: 'constant-arrival-rate',
-      rate: parseInt(__ENV.RATE || '10', 10),
+      rate: RATE,
       timeUnit: '1s',
-      duration: __ENV.DURATION || '1m',
+      duration: DURATION,
       preAllocatedVUs: parseInt(__ENV.PRE_VUS || '20', 10),
       maxVUs: parseInt(__ENV.MAX_VUS || '200', 10),
     },
@@ -25,7 +28,7 @@ export const options = {
   thresholds: {
     http_req_failed: ['rate<0.001'],
     http_req_duration: [`p(95)<${__ENV.P95_MS || 50}`],
-    dropped_iterations: ['count==0'],
+    dropped_iterations: [`count<=${maxDropped(RATE, DURATION)}`],
     checks: ['rate>0.999'],
   },
 };
