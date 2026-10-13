@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,7 @@ type RateLimitGroup struct {
 	// Match reports whether the request belongs to this group. A nil Match matches every request.
 	Match func(*fiber.Ctx) bool
 	// Key returns the client identity to limit, e.g. "user:<id>". A nil Key, or an empty result, falls back to the
-	// client IP.
+	// client IP; an IPv6 client is keyed by its /64.
 	Key func(*fiber.Ctx) string
 }
 
@@ -141,7 +142,7 @@ func newGroupLimiter(group RateLimitGroup, clientIP ClientIPConfig, algorithm li
 				key = group.Key(c)
 			}
 			if key == "" {
-				key = "ip:" + ClientIP(c, clientIP)
+				key = "ip:" + ipKey(ClientIP(c, clientIP))
 			}
 			return group.Name + ":" + key
 		},
@@ -157,6 +158,17 @@ func newGroupLimiter(group RateLimitGroup, clientIP ClientIPConfig, algorithm li
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"message": LimitedMessage})
 		},
 	})
+}
+
+// ipKey is the part of a client IP that identifies the client: the whole IPv4 address, or the /64 of an IPv6 one, since
+// one host is usually handed a whole /64 and could otherwise take a fresh bucket for every address in it. An address that
+// does not parse is kept as is.
+func ipKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil || !addr.Is6() {
+		return ip
+	}
+	return netip.PrefixFrom(addr, 64).Masked().String()
 }
 
 func isExempt(path string, paths, prefixes []string) bool {

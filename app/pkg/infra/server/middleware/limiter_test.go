@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis_rate/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -158,4 +159,24 @@ func TestRateLimiter_GroupKeyFunc(t *testing.T) {
 	// Without a user the request falls back to the IP bucket, which is still unused.
 	assert.Equal(t, fiber.StatusOK, serve(t, app, "/x", testPeer, nil).StatusCode())
 	assert.Equal(t, fiber.StatusTooManyRequests, serve(t, app, "/x", testPeer, nil).StatusCode())
+}
+
+func TestRateLimiter_IPv6ClientsShareTheirSlash64(t *testing.T) {
+	app := newLimitedApp(t, RateLimiterConfig{
+		Groups: []RateLimitGroup{{Name: "default", Rule: RateLimitRule{Max: 1, Window: time.Minute}}},
+	})
+
+	assert.Equal(t, fiber.StatusOK, serve(t, app, "/x", "2001:db8:1:2::1", nil).StatusCode())
+	assert.Equal(t, fiber.StatusTooManyRequests, serve(t, app, "/x", "2001:db8:1:2:ffff::9", nil).StatusCode(),
+		"an address in the same /64 shares the bucket")
+	assert.Equal(t, fiber.StatusOK, serve(t, app, "/x", "2001:db8:1:3::1", nil).StatusCode(),
+		"an address in another /64 has its own bucket")
+	assert.Equal(t, fiber.StatusOK, serve(t, app, "/x", "203.0.113.7", nil).StatusCode())
+	assert.Equal(t, fiber.StatusOK, serve(t, app, "/x", "203.0.113.8", nil).StatusCode(),
+		"IPv4 addresses are keyed one by one")
+
+	fake := &fakeAllower{result: &redis_rate.Result{Allowed: 1, Remaining: 4}}
+	redisApp := newLimitedApp(t, redisLimitedConfig(fake, newTestClock(), 5))
+	serve(t, redisApp, "/x", "2001:db8:1:2:ffff::9", nil)
+	assert.Equal(t, []string{"auth:ip:2001:db8:1:2::/64"}, fake.keys)
 }

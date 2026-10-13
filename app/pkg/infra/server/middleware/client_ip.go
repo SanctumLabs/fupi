@@ -18,7 +18,8 @@ type ClientIPConfig struct {
 
 // ClientIP returns the address of the client that sent the request. The TCP peer is returned unless cfg.Header is set
 // and the peer is a trusted proxy, in which case the header is walked from the right and the first address that is
-// not itself a trusted proxy is returned. Entries further left are client-controlled and are never consulted. If the
+// not itself a trusted proxy is returned. Repeated header lines are read as one list, in order (RFC 9110), since a proxy
+// may add its own line after the client's. Entries further left are client-controlled and are never consulted. If the
 // header yields no usable address, or an entry on the way is not an IP, the peer is returned.
 func ClientIP(c *fiber.Ctx, cfg ClientIPConfig) string {
 	remote := c.Context().RemoteIP()
@@ -32,7 +33,10 @@ func ClientIP(c *fiber.Ctx, cfg ClientIPConfig) string {
 		return peer.String()
 	}
 
-	entries := strings.Split(c.Get(cfg.Header), ",")
+	var entries []string
+	for _, line := range c.Request().Header.PeekAll(cfg.Header) {
+		entries = append(entries, strings.Split(string(line), ",")...)
+	}
 	for i := len(entries) - 1; i >= 0; i-- {
 		addr, err := netip.ParseAddr(strings.TrimSpace(entries[i]))
 		if err != nil {

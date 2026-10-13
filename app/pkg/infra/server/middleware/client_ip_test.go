@@ -10,8 +10,9 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// clientIPFor runs ClientIP inside a fiber handler for a request arriving from the given peer address.
-func clientIPFor(t *testing.T, peer string, cfg ClientIPConfig, headers map[string]string) string {
+// clientIPFor runs ClientIP inside a fiber handler for a request arriving from the given peer address. Each value of a
+// header is sent as its own header line, in order.
+func clientIPFor(t *testing.T, peer string, cfg ClientIPConfig, headers map[string][]string) string {
 	t.Helper()
 
 	app := fiber.New()
@@ -22,8 +23,10 @@ func clientIPFor(t *testing.T, peer string, cfg ClientIPConfig, headers map[stri
 	var req fasthttp.Request
 	req.SetRequestURI("/")
 	req.Header.SetMethod(fiber.MethodGet)
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	for k, values := range headers {
+		for _, v := range values {
+			req.Header.Add(k, v)
+		}
 	}
 
 	var ctx fasthttp.RequestCtx
@@ -37,10 +40,12 @@ func TestClientIP(t *testing.T) {
 	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
 
 	tests := []struct {
-		name    string
-		peer    string
-		header  string
-		value   string
+		name   string
+		peer   string
+		header string
+		value  string
+		// more are further lines of the header, sent after value.
+		more    []string
 		trusted []netip.Prefix
 		want    string
 	}{
@@ -56,13 +61,14 @@ func TestClientIP(t *testing.T) {
 		{name: "IPv4-mapped peer is trusted", peer: "::ffff:10.0.0.2", header: "X-Forwarded-For", value: "198.51.100.9", trusted: trusted, want: "198.51.100.9"},
 		{name: "IPv4-mapped peer is unmapped", peer: "::ffff:203.0.113.7", header: "", trusted: trusted, want: "203.0.113.7"},
 		{name: "IPv4-mapped header entry is unmapped", peer: "10.0.0.2", header: "X-Forwarded-For", value: "198.51.100.9, ::ffff:10.0.0.3", trusted: trusted, want: "198.51.100.9"},
+		{name: "repeated header lines are one list", peer: "10.0.0.2", header: "X-Forwarded-For", value: "1.1.1.1", more: []string{"198.51.100.9"}, trusted: trusted, want: "198.51.100.9"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			headers := map[string]string{}
+			headers := map[string][]string{}
 			if tt.value != "" {
-				headers[tt.header] = tt.value
+				headers[tt.header] = append([]string{tt.value}, tt.more...)
 			}
 			got := clientIPFor(t, tt.peer, ClientIPConfig{Header: tt.header, TrustedProxies: tt.trusted}, headers)
 			assert.Equal(t, tt.want, got)
