@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -22,6 +23,11 @@ type ServerSettings struct {
 	Version string
 	// BaseURL is the externally visible address, used to build links in emails.
 	BaseURL string
+	// ProxyHeader is the request header (for example X-Forwarded-For) that names the client behind a reverse proxy.
+	// It is only believed when the request comes from one of TrustedProxies.
+	ProxyHeader string
+	// TrustedProxies are the addresses of the reverse proxies allowed to set ProxyHeader.
+	TrustedProxies []netip.Prefix
 }
 
 // DatabaseSettings configures Postgres: the client settings plus the per-operation timeout the datastores use.
@@ -69,6 +75,7 @@ type App struct {
 	Auth            AuthConfig
 	ShortCode       ShortCodeSettings
 	RedirectCache   RedirectCacheSettings
+	RateLimit       RateLimitSettings
 	Logging         LoggingSettings
 	ShutdownTimeout time.Duration
 	// Warnings are problems that do not stop startup but that the operator should see in the log.
@@ -101,6 +108,8 @@ func Load(lookup Lookup) (App, error) {
 	app.ShortCode, err = LoadShortCode(lookup)
 	errs = append(errs, err)
 	app.RedirectCache, err = LoadRedirectCache(lookup)
+	errs = append(errs, err)
+	app.RateLimit, err = LoadRateLimit(lookup)
 	errs = append(errs, err)
 	app.Logging, err = LoadLogging(lookup)
 	errs = append(errs, err)
@@ -136,12 +145,21 @@ func warnings(r *reader, app App) []string {
 func LoadServer(lookup Lookup) (ServerSettings, error) {
 	r := newReader(lookup)
 	settings := ServerSettings{
-		Host:    r.str("SERVER_HOST", "0.0.0.0"),
-		Port:    r.integer("HTTP_PORT", 8085),
-		Header:  r.str("SERVER_HEADER", "Fupi"),
-		Name:    r.str("SERVER_NAME", "Fupi"),
-		Version: r.str("SERVER_VERSION", "1.0.0"),
-		BaseURL: r.str("APP_BASE_URL", "http://localhost:8085"),
+		Host:        r.str("SERVER_HOST", "0.0.0.0"),
+		Port:        r.integer("HTTP_PORT", 8085),
+		Header:      r.str("SERVER_HEADER", "Fupi"),
+		Name:        r.str("SERVER_NAME", "Fupi"),
+		Version:     r.str("SERVER_VERSION", "1.0.0"),
+		BaseURL:     r.str("APP_BASE_URL", "http://localhost:8085"),
+		ProxyHeader: r.str("SERVER_PROXY_HEADER", ""),
+	}
+	if proxies, err := parseProxies(splitList(r.str("SERVER_TRUSTED_PROXIES", ""))); err != nil {
+		r.fail("SERVER_TRUSTED_PROXIES: %v", err)
+	} else {
+		settings.TrustedProxies = proxies
+	}
+	if settings.ProxyHeader != "" && len(settings.TrustedProxies) == 0 {
+		r.fail("SERVER_PROXY_HEADER needs SERVER_TRUSTED_PROXIES: the header is only believed from a trusted proxy")
 	}
 	if settings.Port < 1 || settings.Port > 65535 {
 		r.fail("HTTP_PORT must be a port between 1 and 65535")

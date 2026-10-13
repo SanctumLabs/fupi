@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
@@ -383,4 +384,36 @@ func TestLoadRedirectCache_DefaultsAndValidation(t *testing.T) {
 
 	_, err = LoadRedirectCache(lookupOf(map[string]string{"REDIRECT_CACHE_TTL": "0"}))
 	require.ErrorContains(t, err, "REDIRECT_CACHE_TTL")
+}
+
+func TestLoadServer_TrustedProxies(t *testing.T) {
+	settings, err := LoadServer(lookupOf(map[string]string{
+		"SERVER_PROXY_HEADER":    "X-Forwarded-For",
+		"SERVER_TRUSTED_PROXIES": "10.0.0.1, 192.168.0.0/16, ::1",
+	}))
+	require.NoError(t, err)
+
+	assert.Equal(t, "X-Forwarded-For", settings.ProxyHeader)
+	assert.Equal(t, []netip.Prefix{
+		netip.MustParsePrefix("10.0.0.1/32"),
+		netip.MustParsePrefix("192.168.0.0/16"),
+		netip.MustParsePrefix("::1/128"),
+	}, settings.TrustedProxies)
+}
+
+func TestLoadServer_RejectsProxySettings(t *testing.T) {
+	_, err := LoadServer(lookupOf(map[string]string{"SERVER_PROXY_HEADER": "X-Forwarded-For"}))
+	assert.ErrorContains(t, err, "SERVER_PROXY_HEADER", "a header nobody is trusted to set would be ignored")
+
+	_, err = LoadServer(lookupOf(map[string]string{"SERVER_TRUSTED_PROXIES": "not-an-ip"}))
+	assert.ErrorContains(t, err, "SERVER_TRUSTED_PROXIES")
+}
+
+func TestLoad_IncludesTheRateLimitSettings(t *testing.T) {
+	app, err := Load(lookupOf(map[string]string{"RATE_LIMIT_ENABLED": "false"}))
+	require.NoError(t, err)
+	assert.False(t, app.RateLimit.Enabled)
+
+	_, err = Load(lookupOf(map[string]string{"RATE_LIMIT_AUTH_MAX": "0"}))
+	assert.ErrorContains(t, err, "RATE_LIMIT_AUTH_MAX", "a bad limit is a startup error")
 }

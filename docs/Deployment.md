@@ -31,6 +31,12 @@ The image sets `ENVIRONMENT=production`. In that mode the API, the migrator and 
 | `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Postgres (the primary, port 5432); or `DATABASE_URL` instead, which wins over those |
 | `DATABASE_SSL_MODE` | defaults to `disable`; use `require` or stronger outside a private network (the API logs a warning otherwise) |
 | `REDIS_ADDRESS`, `REDIS_PASSWORD` | a comma-separated `host:port` list (one address gives a plain client, several a cluster client) and the password; `REDIS_USERNAME` defaults to `fupi-svc` |
+| `RATE_LIMIT_ENABLED` | `true`; `false` turns the HTTP rate limiter off |
+| `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_CREATE_MAX`, `RATE_LIMIT_REDIRECT_MAX`, `RATE_LIMIT_DEFAULT_MAX` | requests each client may make per window to the auth routes (default 10), url creation (30), the redirect (300) and everything else (100); at least 1 |
+| `RATE_LIMIT_AUTH_WINDOW`, `RATE_LIMIT_CREATE_WINDOW`, `RATE_LIMIT_REDIRECT_WINDOW`, `RATE_LIMIT_DEFAULT_WINDOW` | the window of each group, in seconds (default 60) |
+| `RATE_LIMIT_REDIS_TIMEOUT_MS` | milliseconds one limiter call to Redis may take (default 50) |
+| `RATE_LIMIT_REDIS_RETRY_AFTER` | seconds advertised in `Retry-After` when Redis cannot be reached (default 5) |
+| `SERVER_PROXY_HEADER`, `SERVER_TRUSTED_PROXIES` | behind a reverse proxy, the header that carries the client address (for example `X-Forwarded-For`) and a comma-separated list of the proxy IPs or CIDR ranges allowed to set it; the header needs the list, and both are unset by default, so the limiter keys on the connection address |
 
 Every variable, its default and its unit is listed in the app-connectivity spec (`docs/superpowers/specs/2026-10-04-app-connectivity-design.md`, section 4); the local defaults are in `.env.example`.
 
