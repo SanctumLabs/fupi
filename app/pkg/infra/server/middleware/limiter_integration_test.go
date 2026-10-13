@@ -39,7 +39,19 @@ func startRedisLimiter(t *testing.T) (*redis_rate.Limiter, *redisContainer.Redis
 	universal, ok := cacheredis.UniversalClient(client)
 	require.True(t, ok)
 
-	return redis_rate.NewLimiter(universal), container
+	limiter := redis_rate.NewLimiter(universal)
+	warmUp(t, limiter)
+	return limiter, container
+}
+
+// warmUp sends one limiter call with a generous deadline, so the limiter script is loaded and a pooled connection exists.
+// A request's first call otherwise spends its budget dialling, saying HELLO and loading the script.
+func warmUp(t *testing.T, limiter *redis_rate.Limiter) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := limiter.Allow(ctx, "warmup", redis_rate.PerSecond(1))
+	require.NoError(t, err)
 }
 
 func TestRateLimiterRedis_SharedAcrossInstances(t *testing.T) {
@@ -103,6 +115,8 @@ func TestRateLimiterRedis_HungRedisFallsBackAndRecovers(t *testing.T) {
 
 	// The pause ends 2s after it began, and Redis is tried again one retry interval after the last failure.
 	time.Sleep(time.Until(paused.Add(2*time.Second + 1500*time.Millisecond)))
+	// The connection that timed out during the pause was dropped; give the probe a pooled one again.
+	warmUp(t, limiter)
 	assert.Equal(t, fiber.StatusOK, serve(t, app, "/x", testPeer, nil).StatusCode())
 
 	metrics = telemetry.collect(t)

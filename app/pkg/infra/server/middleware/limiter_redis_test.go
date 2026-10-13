@@ -195,6 +195,50 @@ func TestRedisLimiter_RetriesRedisAfterCooldown(t *testing.T) {
 	assert.False(t, backend.active())
 }
 
+func TestRedisLimiter_OneRequestProbesAfterCooldown(t *testing.T) {
+	logTo(t, slog.LevelInfo)
+	fake := &fakeAllower{err: errRedisDown}
+	clock := newTestClock()
+	cfg := redisLimitedConfig(fake, clock, 1000)
+	cfg.RedisTimeout = 10 * time.Second
+	app := newLimitedApp(t, cfg)
+
+	require.Equal(t, fiber.StatusOK, serve(t, app, "/x", testPeer, nil).StatusCode())
+	require.EqualValues(t, 1, fake.calls.Load())
+
+	// The cooldown is over and Redis hangs: one request probes it, and the others must not wait on it too.
+	clock.advance(5 * time.Second)
+	var once sync.Once
+	releaseAll := fake.hold()
+	release := func() { once.Do(releaseAll) }
+	t.Cleanup(release)
+
+	const n = 20
+	done := make(chan int, n)
+	for i := 0; i < n; i++ {
+		go func() { done <- serve(t, app, "/x", testPeer, nil).StatusCode() }()
+	}
+	for i := 0; i < n-1; i++ {
+		select {
+		case code := <-done:
+			assert.Equal(t, fiber.StatusOK, code)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %d of %d requests finished: more than one is waiting on Redis", i, n-1)
+		}
+	}
+	assert.EqualValues(t, 2, fake.calls.Load(), "exactly one request probes Redis")
+
+	release()
+	assert.Equal(t, fiber.StatusOK, <-done)
+
+	// The probe failed, so the cooldown starts again from it, and the next probe is allowed once it ends.
+	require.Equal(t, fiber.StatusOK, serve(t, app, "/x", testPeer, nil).StatusCode())
+	assert.EqualValues(t, 2, fake.calls.Load(), "Redis is not probed during the new cooldown")
+	clock.advance(5 * time.Second)
+	require.Equal(t, fiber.StatusOK, serve(t, app, "/x", testPeer, nil).StatusCode())
+	assert.EqualValues(t, 3, fake.calls.Load(), "a failed probe lets the next one through after the cooldown")
+}
+
 func TestRedisLimiter_HungRedisDoesNotStall(t *testing.T) {
 	logTo(t, slog.LevelInfo)
 	fake := &fakeAllower{release: make(chan struct{})}
@@ -218,9 +262,9 @@ func TestRedisLimiter_LogsTransitionsOnce(t *testing.T) {
 	cfg.RedisTimeout = 10 * time.Second
 	app := newLimitedApp(t, cfg)
 
-	// serveTogether sends n concurrent requests and holds their Redis calls until all n are in flight, so they all
+	// serveTogether sends n concurrent requests and holds their Redis calls until inFlight of them are waiting, so those
 	// reach the backend transition at once.
-	serveTogether := func(n int) {
+	serveTogether := func(n, inFlight int) {
 		calls := fake.calls.Load()
 		releaseAll := fake.hold()
 		var wg sync.WaitGroup
@@ -231,16 +275,17 @@ func TestRedisLimiter_LogsTransitionsOnce(t *testing.T) {
 				serve(t, app, "/x", testPeer, nil)
 			}()
 		}
-		require.Eventually(t, func() bool { return fake.calls.Load() == calls+int32(n) }, 5*time.Second, time.Millisecond)
+		require.Eventually(t, func() bool { return fake.calls.Load() == calls+int32(inFlight) }, 5*time.Second, time.Millisecond)
 		releaseAll()
 		wg.Wait()
 	}
 
-	serveTogether(50)
+	serveTogether(50, 50)
 
+	// In the fallback only one request at a time probes Redis; the rest are decided in memory meanwhile.
 	clock.advance(time.Minute)
 	fake.answer(&redis_rate.Result{Allowed: 1, Remaining: 999, ResetAfter: time.Second}, nil)
-	serveTogether(50)
+	serveTogether(50, 1)
 
 	counts := map[string]int{}
 	for _, line := range logLines(t, buf) {
@@ -269,4 +314,47 @@ func TestRateLimitBackend_IgnoresSuccessStartedDuringCooldown(t *testing.T) {
 
 	backend.succeeded(ctx, failedAt.Add(5*time.Second))
 	assert.False(t, backend.active(), "a probe after the cooldown recovers")
+}
+
+func TestRateLimitBackend_ProbesOneAtATime(t *testing.T) {
+	logTo(t, slog.LevelInfo)
+	ctx := context.Background()
+	backend := newRateLimitBackend(5 * time.Second)
+	start := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+
+	use, probe := backend.useRedis(start)
+	assert.True(t, use)
+	assert.False(t, probe, "a healthy backend has no probe")
+
+	backend.failed(ctx, start, errRedisDown)
+	use, _ = backend.useRedis(start.Add(time.Second))
+	assert.False(t, use, "no request asks Redis during the cooldown")
+
+	// After the cooldown one request probes, and the others wait for its answer in memory.
+	afterCooldown := start.Add(5 * time.Second)
+	use, probe = backend.useRedis(afterCooldown)
+	assert.True(t, use)
+	assert.True(t, probe)
+	use, _ = backend.useRedis(afterCooldown)
+	assert.False(t, use, "a second request does not probe while one is in flight")
+
+	// A failed probe restarts the cooldown and frees the next probe.
+	backend.failed(ctx, afterCooldown, errRedisDown)
+	backend.probed()
+	use, _ = backend.useRedis(afterCooldown)
+	assert.False(t, use)
+	nextCooldown := afterCooldown.Add(5 * time.Second)
+	use, probe = backend.useRedis(nextCooldown)
+	assert.True(t, use)
+	assert.True(t, probe)
+
+	// A successful probe ends the fallback, and every request asks Redis again.
+	backend.succeeded(ctx, nextCooldown)
+	backend.probed()
+	assert.False(t, backend.active())
+	for i := 0; i < 2; i++ {
+		use, probe = backend.useRedis(nextCooldown)
+		assert.True(t, use)
+		assert.False(t, probe)
+	}
 }

@@ -180,3 +180,32 @@ func TestRateLimiter_IPv6ClientsShareTheirSlash64(t *testing.T) {
 	serve(t, redisApp, "/x", "2001:db8:1:2:ffff::9", nil)
 	assert.Equal(t, []string{"auth:ip:2001:db8:1:2::/64"}, fake.keys)
 }
+
+func TestRateLimiter_RedisNeedsPositiveTimeouts(t *testing.T) {
+	groups := []RateLimitGroup{{Name: "auth", Rule: RateLimitRule{Max: 1, Window: time.Minute}}}
+
+	tests := []struct {
+		name                string
+		timeout, retryAfter time.Duration
+		wantErr             string
+	}{
+		{name: "no timeout", timeout: 0, retryAfter: time.Second, wantErr: "redis timeout"},
+		{name: "negative timeout", timeout: -time.Second, retryAfter: time.Second, wantErr: "redis timeout"},
+		{name: "no retry after", timeout: time.Second, retryAfter: 0, wantErr: "redis retry after"},
+		{name: "negative retry after", timeout: time.Second, retryAfter: -time.Second, wantErr: "redis retry after"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := RateLimiterMiddleware(RateLimiterConfig{
+				Groups:          groups,
+				Redis:           &fakeAllower{},
+				RedisTimeout:    tt.timeout,
+				RedisRetryAfter: tt.retryAfter,
+			})
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+
+	_, err := RateLimiterMiddleware(RateLimiterConfig{Groups: groups})
+	assert.NoError(t, err, "the timeouts are not needed without Redis")
+}

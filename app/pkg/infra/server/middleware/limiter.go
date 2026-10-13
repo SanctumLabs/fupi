@@ -51,6 +51,8 @@ type RateLimiterConfig struct {
 	// ClientIP controls how the client IP of the default key is resolved.
 	ClientIP ClientIPConfig
 
+	// Redis, when set, decides requests; RedisTimeout bounds each call to it, and after an error RedisRetryAfter is how
+	// long the limiter decides in memory before asking Redis again. Both must be positive when Redis is set.
 	Redis           RateAllower
 	RedisTimeout    time.Duration
 	RedisRetryAfter time.Duration
@@ -65,6 +67,12 @@ type RateLimiterConfig struct {
 func RateLimiterMiddleware(cfg RateLimiterConfig) (fiber.Handler, error) {
 	var backend *rateLimitBackend
 	if cfg.Redis != nil {
+		if cfg.RedisTimeout <= 0 {
+			return nil, fmt.Errorf("rate limiter needs a positive redis timeout, got %s", cfg.RedisTimeout)
+		}
+		if cfg.RedisRetryAfter <= 0 {
+			return nil, fmt.Errorf("rate limiter needs a positive redis retry after, got %s", cfg.RedisRetryAfter)
+		}
 		backend = newRateLimitBackend(cfg.RedisRetryAfter)
 	}
 	metrics, err := newLimiterMetrics(cfg.MeterProvider, backend)

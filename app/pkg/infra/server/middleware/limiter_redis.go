@@ -34,7 +34,8 @@ func (r *redisRateLimiter) New(cfg limiter.Config) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		now := r.now()
 		key := cfg.KeyGenerator(c)
-		if !r.backend.useRedis(now) {
+		use, probe := r.backend.useRedis(now)
+		if !use {
 			return r.metrics.inMemory(c, fallback, r.group, key)
 		}
 
@@ -43,10 +44,16 @@ func (r *redisRateLimiter) New(cfg limiter.Config) fiber.Handler {
 		cancel()
 		if err != nil {
 			r.backend.failed(c.UserContext(), now, err)
+			if probe {
+				r.backend.probed()
+			}
 			r.metrics.backendError(c.UserContext(), r.group)
 			return r.metrics.inMemory(c, fallback, r.group, key)
 		}
 		r.backend.succeeded(c.UserContext(), now)
+		if probe {
+			r.backend.probed()
+		}
 
 		c.Set("X-RateLimit-Limit", limitHeader)
 		c.Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
@@ -70,15 +77,32 @@ type rateLimitBackend struct {
 	fallback atomic.Bool
 	// retryAt is when, in Unix nanoseconds, Redis may be tried again.
 	retryAt atomic.Int64
+	// probing is true while one request, after the cooldown, asks Redis whether it is back.
+	probing atomic.Bool
 }
 
 func newRateLimitBackend(retryAfter time.Duration) *rateLimitBackend {
 	return &rateLimitBackend{retryAfter: retryAfter}
 }
 
-// useRedis reports whether a request at now should ask Redis: always while healthy, and after the cooldown otherwise.
-func (b *rateLimitBackend) useRedis(now time.Time) bool {
-	return !b.fallback.Load() || now.UnixNano() >= b.retryAt.Load()
+// useRedis reports whether a request at now should ask Redis: always while healthy and, in the fallback, only once the
+// cooldown is over and no other request is probing Redis. probe reports that this request is the probe; it must call
+// probed once it has recorded the answer, so the others stay in memory until then instead of all waiting on a Redis
+// that may still be down.
+func (b *rateLimitBackend) useRedis(now time.Time) (use, probe bool) {
+	if !b.fallback.Load() {
+		return true, false
+	}
+	if now.UnixNano() < b.retryAt.Load() {
+		return false, false
+	}
+	probe = b.probing.CompareAndSwap(false, true)
+	return probe, probe
+}
+
+// probed ends a probe, after its answer has been recorded by failed or succeeded.
+func (b *rateLimitBackend) probed() {
+	b.probing.Store(false)
 }
 
 // failed records a Redis error for a request started at now and starts the cooldown, anchored at that start time. Only

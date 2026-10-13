@@ -301,8 +301,10 @@ func TestServer_GuardsRunBeforeIdempotency(t *testing.T) {
 	verdict := &verdictAllower{}
 	verdict.allowed.Store(true)
 	limit, err := servermw.RateLimiterMiddleware(servermw.RateLimiterConfig{
-		Groups: []servermw.RateLimitGroup{{Name: "all", Rule: servermw.RateLimitRule{Max: 1, Window: time.Minute}}},
-		Redis:  verdict,
+		Groups:          []servermw.RateLimitGroup{{Name: "all", Rule: servermw.RateLimitRule{Max: 1, Window: time.Minute}}},
+		Redis:           verdict,
+		RedisTimeout:    time.Second,
+		RedisRetryAfter: time.Second,
 	})
 	require.NoError(t, err)
 
