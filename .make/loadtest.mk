@@ -7,6 +7,11 @@ K6_NETWORK ?= fupi
 LOADTEST_BASE_URL ?= http://fupi-app:8085
 # The Go seeder runs on the host, so it uses the published port.
 SEED_BASE_URL ?= http://127.0.0.1:8085
+SCENARIO ?= redirect
+START ?= 100
+STEP ?= 100
+MAX ?= 5000
+STEP_DURATION ?= 45s
 USERS ?= 5
 URLS_PER_USER ?= 20
 
@@ -28,5 +33,9 @@ loadtest.smoke: ## Runs the smoke scenario against the seeded data (needs make l
 	$(K6_RUN) $(K6_IMAGE) run /loadtest/scenarios/smoke.js
 
 .PHONY: loadtest.run
-loadtest.run: ## Runs a scenario, usage make loadtest.run SCENARIO=redirect K6_ARGS="-e RATE=50 -e DURATION=5m"
-	$(K6_RUN) $(K6_IMAGE) run /loadtest/scenarios/$(SCENARIO).js
+loadtest.run: ## Runs a scenario, usage make loadtest.run SCENARIO=redirect K6_ARGS="-e RATE=50 -e DURATION=5m" (K6_FLAGS are k6 flags, K6_ARGS docker flags)
+	$(K6_RUN) $(K6_IMAGE) run $(K6_FLAGS) /loadtest/scenarios/$(SCENARIO).js
+
+.PHONY: loadtest.stress
+loadtest.stress: ## Steps the arrival rate up until a threshold fails, usage make loadtest.stress SCENARIO=redirect START=100 STEP=100 MAX=5000 STEP_DURATION=45s
+	@SCENARIO=$(SCENARIO) START=$(START) STEP=$(STEP) MAX=$(MAX) STEP_DURATION=$(STEP_DURATION) $(ROOT_DIR)/loadtest/stress.sh

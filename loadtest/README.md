@@ -41,6 +41,13 @@ make loadtest.run SCENARIO=create   K6_ARGS="-e RATE=2 -e DURATION=20m"
 | `redirect` | public `GET /{code}` at a constant arrival rate, Zipf-weighted codes, `MISS_RATIO` (default 5%) unknown codes |
 | `create` | `POST /urls` at a constant arrival rate; each VU is pinned to a seeded user and refreshes its token before it expires |
 
+| `floor` | unauthenticated `GET /urls`, rejected before any DB or Redis call: the noise floor of generator + Docker network + HTTP server |
+
+`make loadtest.stress SCENARIO=redirect START=200 STEP=200 MAX=5000 STEP_DURATION=45s` runs a scenario at a rising rate,
+one k6 run per step, prints one row per step (achieved rate, p50/p95/p99, failure %, dropped iterations) and stops at the
+first step that crosses a threshold. Per-step summaries land in `loadtest/results/` (git-ignored). Add
+`P95_MS=...` to change the latency threshold.
+
 `rate_limited` counts 429s apart from other failures, `token_refreshes` counts refresh calls, and `unauthorized` counts
 401s on the management routes (it must stay 0). A threshold failure makes k6, and so `make`, exit non-zero.
 
@@ -57,3 +64,13 @@ make loadtest.run SCENARIO=create   K6_ARGS="-e RATE=2 -e DURATION=20m"
 | `REFRESH_MARGIN_S` | `120` | refresh the access token this many seconds before it expires |
 
 To point at another environment, set `LOADTEST_BASE_URL` (untested so far: the container must be able to reach that address, and `K6_NETWORK` may need changing).
+
+## Reading results on a laptop
+
+Generator, API, Postgres, Redis and Kafka share one machine and Docker Desktop's VM, so tails (p99 and up) vary a lot
+between identical runs: the same 600 req/s redirect run gave p99 from 28ms to 270ms. Run `floor` at the same rate first;
+a tail that is also there is not the application. Repeat a step before trusting a failure, and record the machine with
+the result.
+
+A threshold on `dropped_iterations` means k6 ran out of VUs while responses stalled: the offered load was not delivered,
+so the step is invalid even when latency looks fine.
