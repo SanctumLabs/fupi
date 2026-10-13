@@ -60,6 +60,9 @@ func NewServer(cfg ServerConfig) *Server {
 	}))
 
 	app.Use(middleware.HelmetMiddleware())
+	for _, guard := range cfg.Guards {
+		app.Use(guard)
+	}
 	app.Use(middleware.IdempotencyMiddleware())
 
 	app.Use(middleware.RecoverMiddleware())

@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis_rate/v10"
 	"github.com/gofiber/fiber/v2"
+	servermw "github.com/sanctumlabs/fupi/app/pkg/infra/server/middleware"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -281,4 +283,46 @@ func TestServe_ACancelDuringStartupStillClosesThePort(t *testing.T) {
 		_, dialErr := net.DialTimeout("tcp", ln.Addr().String(), 200*time.Millisecond)
 		require.Error(t, dialErr, "iteration %d: the port still accepts connections after Serve returned", i)
 	}
+}
+
+// verdictAllower is a RateAllower whose verdict the test flips.
+type verdictAllower struct{ allowed atomic.Bool }
+
+func (v *verdictAllower) Allow(_ context.Context, _ string, limit redis_rate.Limit) (*redis_rate.Result, error) {
+	if v.allowed.Load() {
+		return &redis_rate.Result{Limit: limit, Allowed: 1, Remaining: limit.Rate - 1, ResetAfter: time.Minute}, nil
+	}
+	return &redis_rate.Result{Limit: limit, Allowed: 0, RetryAfter: time.Minute, ResetAfter: time.Minute}, nil
+}
+
+// A limited response must not be stored by the idempotency middleware, or the retry with the same key would replay the 429
+// after the limit has cleared.
+func TestServer_GuardsRunBeforeIdempotency(t *testing.T) {
+	verdict := &verdictAllower{}
+	verdict.allowed.Store(true)
+	limit, err := servermw.RateLimiterMiddleware(servermw.RateLimiterConfig{
+		Groups: []servermw.RateLimitGroup{{Name: "all", Rule: servermw.RateLimitRule{Max: 1, Window: time.Minute}}},
+		Redis:  verdict,
+	})
+	require.NoError(t, err)
+
+	srv := NewServer(ServerConfig{Port: 0, AppName: "fupi-test", Guards: []fiber.Handler{limit}})
+	srv.App().Post("/things", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusCreated) })
+
+	post := func(key string) int {
+		req := httptest.NewRequest(http.MethodPost, "/things", nil)
+		req.Header.Set("X-Idempotency-Key", key)
+		resp, err := srv.App().Test(req)
+		require.NoError(t, err)
+		return resp.StatusCode
+	}
+
+	const keyA, keyB = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+	assert.Equal(t, fiber.StatusCreated, post(keyA))
+
+	verdict.allowed.Store(false)
+	assert.Equal(t, fiber.StatusTooManyRequests, post(keyB))
+
+	verdict.allowed.Store(true)
+	assert.Equal(t, fiber.StatusCreated, post(keyB), "the 429 must not be replayed for the same idempotency key")
 }

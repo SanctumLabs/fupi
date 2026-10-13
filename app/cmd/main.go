@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-redis/redis_rate/v10"
+	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	apimiddleware "github.com/sanctumlabs/fupi/app/api/middleware"
 	"github.com/sanctumlabs/fupi/app/api/probes"
@@ -32,12 +34,14 @@ import (
 	identityapp "github.com/sanctumlabs/fupi/app/internal/application/identity"
 	urlapp "github.com/sanctumlabs/fupi/app/internal/application/url"
 	"github.com/sanctumlabs/fupi/app/pkg"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/cache"
 	cacheredis "github.com/sanctumlabs/fupi/app/pkg/infra/cache/redis"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/monitoring/health"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/queue/kafka"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/server"
+	servermw "github.com/sanctumlabs/fupi/app/pkg/infra/server/middleware"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
 	"github.com/sanctumlabs/fupi/app/pkg/infra/telemetry"
 	"github.com/sanctumlabs/fupi/app/pkg/jwt"
@@ -103,6 +107,33 @@ func main() {
 		slog.Error("fupi stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+// newRateLimiter builds the rate limiting middleware. Limits are shared across instances through Redis when the cache
+// is a Redis client; otherwise each instance limits on its own.
+func newRateLimiter(cfg config.App, client cache.CacheClient) (fiber.Handler, error) {
+	rule := func(r config.RateLimitRule) servermw.RateLimitRule {
+		return servermw.RateLimitRule{Max: r.Max, Window: r.Window}
+	}
+	rl := cfg.RateLimit
+
+	limiterCfg := servermw.RateLimiterConfig{
+		Groups: apimiddleware.RateLimitGroups(baseURI, urlapi.RedirectPathPattern, apimiddleware.RateLimitRules{
+			Auth:     rule(rl.Auth),
+			Create:   rule(rl.Create),
+			Redirect: rule(rl.Redirect),
+			Default:  rule(rl.Default),
+		}),
+		ExemptPaths:     []string{probes.LivePath, probes.ReadyPath},
+		ExemptPrefixes:  []string{"/docs"},
+		ClientIP:        servermw.ClientIPConfig{Header: cfg.Server.ProxyHeader, TrustedProxies: cfg.Server.TrustedProxies},
+		RedisTimeout:    rl.RedisTimeout,
+		RedisRetryAfter: rl.RedisRetryAfter,
+	}
+	if universal, ok := cacheredis.UniversalClient(client); ok {
+		limiterCfg.Redis = redis_rate.NewLimiter(universal)
+	}
+	return servermw.RateLimiterMiddleware(limiterCfg)
 }
 
 // healthcheck probes the API running on this host and returns the process exit code: 0 when GET /health answers 200,
@@ -221,20 +252,10 @@ func run(ctx context.Context, cfg config.App) error {
 		urlapp.WithRedirectCache(redisadapter.NewRedirectCache(cache), cfg.RedirectCache.TTL, cfg.RedirectCache.AbsentTTL),
 	).WithAccessRecorder(accessRecorder)
 
-	srv := server.NewServer(server.ServerConfig{
-		Header:      cfg.Server.Header,
-		Host:        cfg.Server.Host,
-		Port:        cfg.Server.Port,
-		AppName:     cfg.Server.Name,
-		Version:     cfg.Server.Version,
-		Environment: cfg.Environment,
-		ProbePaths:  []string{probes.LivePath, probes.ReadyPath},
-	})
-
 	// Everything is authenticated unless it is listed here. Registration, login, token refresh
 	// and email verification must be reachable without a token, by definition, and so must the probes
 	// and the short-url redirect.
-	srv.Use(apimiddleware.AuthMiddleware(apimiddleware.AuthConfig{
+	auth := apimiddleware.AuthMiddleware(apimiddleware.AuthConfig{
 		TokenService: tokenService,
 		PublicPaths: []string{
 			baseURI + "/auth/register",
@@ -246,7 +267,32 @@ func run(ctx context.Context, cfg config.App) error {
 		},
 		PublicPrefixes: []string{"/docs/"},
 		PublicPatterns: []*regexp.Regexp{urlapi.RedirectPathPattern},
-	}))
+	})
+
+	// The limiter runs after authentication, so url creation is limited per user. Without it the guards are just auth.
+	guards := []fiber.Handler{auth}
+	if cfg.RateLimit.Enabled {
+		limit, limitErr := newRateLimiter(cfg, cache)
+		if limitErr != nil {
+			return fmt.Errorf("create the rate limiter: %w", limitErr)
+		}
+		guards = append(guards, limit)
+	}
+	rl := cfg.RateLimit
+	perWindow := func(r config.RateLimitRule) string { return fmt.Sprintf("%d per %s", r.Max, r.Window) }
+	slog.Info("rate limiting", "enabled", rl.Enabled,
+		"auth", perWindow(rl.Auth), "create", perWindow(rl.Create), "redirect", perWindow(rl.Redirect), "default", perWindow(rl.Default))
+
+	srv := server.NewServer(server.ServerConfig{
+		Header:      cfg.Server.Header,
+		Host:        cfg.Server.Host,
+		Port:        cfg.Server.Port,
+		AppName:     cfg.Server.Name,
+		Version:     cfg.Server.Version,
+		Environment: cfg.Environment,
+		ProbePaths:  []string{probes.LivePath, probes.ReadyPath},
+		Guards:      guards,
+	})
 
 	srv.RegisterHandlers([]router.Router{
 		probes.NewRouter(registry),
