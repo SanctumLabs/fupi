@@ -145,7 +145,7 @@ flowchart TB
 
 ### API layer
 
-[server.NewServer](../app/pkg/infra/server/server.go) installs the middleware in this order: OpenTelemetry → request ID → access log → CORS → the `/docs` rewrite and Swagger (public) → Helmet → idempotency → recover. [main.go](../app/cmd/main.go) then adds the JWT auth middleware and registers the routers. The auth middleware's allowlist holds the auth endpoints, the probes, `/docs/` and the redirect pattern. The URL router is registered last because `GET /:code` matches any single-segment path.
+[server.NewServer](../app/pkg/infra/server/server.go) installs the middleware in this order: OpenTelemetry → request ID → access log → CORS → the `/docs` rewrite and Swagger (public) → Helmet → recover → the guards → idempotency. [main.go](../app/cmd/main.go) passes the guards in: the JWT auth middleware, then the rate limiter when `RATE_LIMIT_ENABLED` is true. Recover sits ahead of the guards so a panic in auth or the limiter returns 500 instead of crashing. The guards sit ahead of idempotency so a 429 is never cached and replayed ([ADR-0024](./adr/0024-rate-limiting-is-atomic-in-redis-with-a-per-instance-fallback.md)). `main.go` then registers the routers. The auth middleware's allowlist holds the auth endpoints, the probes, `/docs/` and the redirect pattern. The URL router is registered last because `GET /:code` matches any single-segment path.
 
 | Route | Auth | Router |
 |---|---|---|
@@ -157,6 +157,28 @@ flowchart TB
 | `GET /docs/` | public | [server.go](../app/pkg/infra/server/server.go) |
 
 Liveness checks nothing. Readiness answers 503 when Postgres is down or the process is draining, and reports Redis as `degraded` without failing ([ADR-0015](./adr/0015-postgres-is-the-only-required-dependency.md)).
+
+### Rate limiting
+
+The limiter ([limiter.go](../app/pkg/infra/server/middleware/limiter.go), [limiter_redis.go](../app/pkg/infra/server/middleware/limiter_redis.go)) is a guard that runs right after authentication. The route groups are defined in [api/middleware/ratelimit.go](../app/api/middleware/ratelimit.go) and passed in from [main.go](../app/cmd/main.go), because `pkg` cannot import `api`. The first matching group limits the request. Every path is matched as Fiber routes it (lower case, trailing slashes trimmed).
+
+| Group | Matches | Key | Default |
+|---|---|---|---|
+| `auth` | any method under `/api/v1/fupi/auth/` | client IP | 10 per 60 s |
+| `create` | `POST /api/v1/fupi/urls` | user ID (IP if absent) | 30 per 60 s |
+| `redirect` | `GET /:code` | client IP | 300 per 60 s |
+| `default` | everything else | client IP | 100 per 60 s |
+
+`/health`, `/health/ready`, `/docs` and the prefix `/docs/` are exempt. A limited request gets `429`, `Retry-After`, `X-RateLimit-*` and `{"message":"too many requests"}`.
+
+- **Semantics:** a steady rate with a burst of `max` (GCRA through `redis_rate`), not a cap per clock window. A client spends `max` at once, then earns one request back every `window/max`. A span of one window can let through up to about `2×max − 1`.
+- **Counting:** one atomic Lua call per request in Redis, so instances share one count.
+- **Fallback:** each Redis call has a 50 ms budget. On an error the request is decided by an in-memory fixed window per instance, and Redis is not tried again for 5 s. With N instances the limit is up to N× during the outage. Redis stays optional ([ADR-0015](./adr/0015-postgres-is-the-only-required-dependency.md)).
+- **Client IP:** the connection address, unless `SERVER_PROXY_HEADER` is set and the peer is in `SERVER_TRUSTED_PROXIES`; then the rightmost address in the header that is not a trusted proxy ([client_ip.go](../app/pkg/infra/server/middleware/client_ip.go)).
+- **Configuration:** `RATE_LIMIT_ENABLED`, `RATE_LIMIT_{AUTH,CREATE,REDIRECT,DEFAULT}_{MAX,WINDOW}` (windows in seconds), `RATE_LIMIT_REDIS_TIMEOUT_MS`, `RATE_LIMIT_REDIS_RETRY_AFTER` (seconds), `SERVER_PROXY_HEADER`, `SERVER_TRUSTED_PROXIES`. See [.env.example](../.env.example).
+- **Signals:** `http.ratelimit.requests` (`group`, `outcome`, `backend`), `http.ratelimit.backend.errors` and the gauge `http.ratelimit.fallback.active` (1 while in the fallback). The log lines `rate limiter falling back to memory` and `rate limiter back on redis` mark the switches. The request span carries the `ratelimit.*` attributes.
+
+Rationale and consequences are in [ADR-0024](./adr/0024-rate-limiting-is-atomic-in-redis-with-a-per-instance-fallback.md). The design is in the [spec](./superpowers/specs/2026-10-13-http-rate-limiter-design.md).
 
 ### Domain layer
 
@@ -247,10 +269,6 @@ All settings come from the environment through [app/config](../app/config/). A `
 
 These are true of the code today and are worth knowing before changing it:
 
-- **The rate limiter isn't installed yet.**
-  - The middleware is implemented in [limiter.go](../app/pkg/infra/server/middleware/limiter.go) and [limiter_redis.go](../app/pkg/infra/server/middleware/limiter_redis.go). It applies per-group budgets keyed by user or trusted-proxy-aware client IP, uses redis_rate when Redis is reachable and falls back to an in-memory window when it isn't.
-  - `config.App.RateLimit` and the trusted-proxy settings are loaded.
-  - Nothing adds the middleware to the server yet. That wiring is the last task of the [rate limiter plan](./superpowers/plans/2026-10-13-http-rate-limiter.md).
 - **Some imports point the wrong way across layers** (the dashed edges in the dependency graph):
   - `pkg/infra/database/postgres` imports the sqlc package in `internal/adapters/postgres/sql`.
   - `pkg/infra/server` imports `api/openapi`.
