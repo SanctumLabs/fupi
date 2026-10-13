@@ -41,7 +41,7 @@ func (r *redisRateLimiter) New(cfg limiter.Config) fiber.Handler {
 			r.backend.failed(c.UserContext(), now, err)
 			return fallback(c)
 		}
-		r.backend.succeeded(c.UserContext())
+		r.backend.succeeded(c.UserContext(), now)
 
 		c.Set("X-RateLimit-Limit", limitHeader)
 		c.Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
@@ -74,7 +74,8 @@ func (b *rateLimitBackend) useRedis(now time.Time) bool {
 	return !b.fallback.Load() || now.UnixNano() >= b.retryAt.Load()
 }
 
-// failed records a Redis error at now and starts the cooldown. Only the request switching to the fallback logs.
+// failed records a Redis error for a request started at now and starts the cooldown, anchored at that start time. Only
+// the request switching to the fallback logs.
 func (b *rateLimitBackend) failed(ctx context.Context, now time.Time, err error) {
 	b.retryAt.Store(now.Add(b.retryAfter).UnixNano())
 	if b.fallback.CompareAndSwap(false, true) {
@@ -82,8 +83,13 @@ func (b *rateLimitBackend) failed(ctx context.Context, now time.Time, err error)
 	}
 }
 
-// succeeded records a Redis answer. Only the request switching back from the fallback logs.
-func (b *rateLimitBackend) succeeded(ctx context.Context) {
+// succeeded records a Redis answer for a request started at now. A request started before the cooldown ends was in
+// flight alongside the failure, so its answer does not end the fallback; a slow Redis would otherwise flap between the
+// two. Only the request switching back from the fallback logs.
+func (b *rateLimitBackend) succeeded(ctx context.Context, now time.Time) {
+	if now.UnixNano() < b.retryAt.Load() {
+		return
+	}
 	if b.fallback.CompareAndSwap(true, false) {
 		slog.InfoContext(ctx, "rate limiter back on redis")
 	}

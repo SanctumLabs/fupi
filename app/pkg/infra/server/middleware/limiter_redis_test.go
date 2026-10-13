@@ -251,3 +251,22 @@ func TestRedisLimiter_LogsTransitionsOnce(t *testing.T) {
 		"INFO rate limiter back on redis":          1,
 	}, counts)
 }
+
+func TestRateLimitBackend_IgnoresSuccessStartedDuringCooldown(t *testing.T) {
+	buf := logTo(t, slog.LevelInfo)
+	ctx := context.Background()
+	backend := newRateLimitBackend(5 * time.Second)
+	failedAt := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+
+	backend.failed(ctx, failedAt, errRedisDown)
+	// A slow request that started after the failing one answers just under its deadline, before the cooldown ends.
+	backend.succeeded(ctx, failedAt.Add(50*time.Millisecond))
+
+	assert.True(t, backend.active(), "a success from before the cooldown ends does not leave the fallback")
+	for _, line := range logLines(t, buf) {
+		assert.NotEqual(t, "rate limiter back on redis", line["msg"])
+	}
+
+	backend.succeeded(ctx, failedAt.Add(5*time.Second))
+	assert.False(t, backend.active(), "a probe after the cooldown recovers")
+}
