@@ -3,11 +3,8 @@
 // request for each code is a cache miss; later ones are hits.
 //
 //   make loadtest.run SCENARIO=redirect K6_ARGS="-e RATE=50 -e DURATION=5m"
-import http from 'k6/http';
-import { check } from 'k6';
-import { BASE_URL, maxDropped } from '../lib/config.js';
-import { pickUrl } from '../lib/data.js';
-import { rateLimited } from '../lib/metrics.js';
+import { maxDropped } from '../lib/config.js';
+import { redirectOnce } from '../lib/actions.js';
 
 const MISS_RATIO = parseFloat(__ENV.MISS_RATIO || '0.05');
 
@@ -33,24 +30,6 @@ export const options = {
   },
 };
 
-// 8 characters: the redirect only serves 3-12 character single segments, anything else needs a token.
-const known = http.expectedStatuses(302);
-const unknown = http.expectedStatuses(404);
-
 export default function () {
-  if (Math.random() < MISS_RATIO) {
-    const res = http.get(`${BASE_URL}/zz${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}`, { redirects: 0, responseCallback: unknown, tags: { name: 'GET /{code} (unknown)' } });
-    check(res, { 'unknown code is 404': (r) => r.status === 404 });
-    return;
-  }
-
-  const target = pickUrl();
-  const res = http.get(`${BASE_URL}/${target.short_code}`, { redirects: 0, responseCallback: known, tags: { name: 'GET /{code}' } });
-  if (res.status === 429) {
-    rateLimited.add(1);
-  }
-  check(res, {
-    'redirect is 302': (r) => r.status === 302,
-    'redirect goes to the stored url': (r) => r.headers['Location'] === target.original_url,
-  });
+  redirectOnce(MISS_RATIO);
 }

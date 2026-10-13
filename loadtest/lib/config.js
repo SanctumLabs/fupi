@@ -10,7 +10,7 @@ export function bearer(token) {
   return { headers: { ...JSON_HEADERS, Authorization: `Bearer ${token}` } };
 }
 
-function seconds(duration) {
+export function seconds(duration) {
   const m = /^(\d+)(s|m|h)$/.exec(duration);
   return parseInt(m[1], 10) * { s: 1, m: 60, h: 3600 }[m[2]];
 }

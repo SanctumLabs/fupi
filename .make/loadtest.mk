@@ -56,3 +56,11 @@ loadtest.app.up: ## Starts the API with load-test rate limits, usage make loadte
 .PHONY: loadtest.ratelimit
 loadtest.ratelimit: ## Checks the redirect rate limit, usage make loadtest.ratelimit GROUP_MAX=200 GROUP_WINDOW_S=3600 (the API must run with the same limit)
 	$(K6_RUN) -e GROUP_MAX=$(GROUP_MAX) -e GROUP_WINDOW_S=$(GROUP_WINDOW_S) $(K6_IMAGE) run /loadtest/scenarios/ratelimit.js
+
+.PHONY: loadtest.soak
+loadtest.soak: ## Mixed traffic for hours, usage make loadtest.soak RATE=500 SOAK_DURATION=4h
+	$(K6_RUN) -e RATE=$(or $(RATE),200) -e DURATION=$(or $(SOAK_DURATION),4h) $(K6_IMAGE) run /loadtest/scenarios/mixed.js
+
+.PHONY: loadtest.spike
+loadtest.spike: ## One hot code at 10x the base rate, usage make loadtest.spike K6_ARGS="-e BASE_RATE=100 -e SPIKE_RATE=1000"
+	$(K6_RUN) $(K6_IMAGE) run /loadtest/scenarios/spike.js
