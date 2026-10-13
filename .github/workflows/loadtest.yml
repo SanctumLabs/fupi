@@ -1,0 +1,88 @@
+name: Load test
+
+# Smoke runs on every pull request that touches the load tests or what they run against: it proves the scripts, the seed
+# and the stack work, it measures nothing. The full profiles are manual (workflow_dispatch): shared runners are too noisy
+# for latency thresholds, so run them against a stack you control.
+on:
+  pull_request:
+    branches:
+      - 'develop'
+      - 'main'
+    paths:
+      - 'loadtest/**'
+      - '.make/loadtest.mk'
+      - 'deploy/app/**'
+      - 'app/api/**'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario in loadtest/scenarios (redirect, create, mixed, spike, floor)'
+        required: true
+        default: 'redirect'
+      rate:
+        description: 'Arrival rate per second'
+        required: true
+        default: '100'
+      duration:
+        description: 'How long to run (e.g. 5m)'
+        required: true
+        default: '5m'
+      users:
+        description: 'Users to seed'
+        required: true
+        default: '20'
+      urls_per_user:
+        description: 'Urls to seed per user'
+        required: true
+        default: '100'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Start Postgres, Redis, Kafka and the API (single mode, rate limiter off)
+        run: |
+          make infra.core.up MODE=single
+          RATE_LIMIT_ENABLED=false make infra.app.up MODE=single
+      - name: Seed
+        run: make loadtest.seed.k6 USERS=2 URLS_PER_USER=5
+      - name: Smoke
+        run: make loadtest.smoke
+      - name: API logs
+        if: failure()
+        run: docker logs fupi-app-single-1 --tail 200
+
+  run:
+    name: Run ${{ inputs.scenario }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Start Postgres, Redis, Kafka and the API (single mode, rate limiter off)
+        run: |
+          make infra.core.up MODE=single
+          RATE_LIMIT_ENABLED=false make infra.app.up MODE=single
+      - name: Seed
+        run: make loadtest.seed.k6 USERS=${{ inputs.users }} URLS_PER_USER=${{ inputs.urls_per_user }}
+      - name: Run
+        run: |
+          mkdir -p loadtest/results
+          make loadtest.run SCENARIO=${{ inputs.scenario }} K6_ARGS="-e RATE=${{ inputs.rate }} -e DURATION=${{ inputs.duration }}" K6_FLAGS="--summary-export /loadtest/results/summary.json"
+      - name: Top statements
+        if: always()
+        run: make infra.pgstat MODE=single
+      - name: Upload the summary
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: loadtest-summary
+          path: loadtest/results/
+          if-no-files-found: ignore

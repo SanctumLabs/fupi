@@ -36,6 +36,7 @@ loadtest.seed: ## Seeds load-test users and urls with the Go seeder, usage make 
 
 .PHONY: loadtest.seed.k6
 loadtest.seed.k6: ## Seeds the same data from k6 (only Docker needed), usage make loadtest.seed.k6
+	@mkdir -p $(ROOT_DIR)/loadtest/.data
 	$(K6_RUN) $(K6_IMAGE) run /loadtest/seed/seed.js
 
 .PHONY: loadtest.smoke
@@ -66,3 +67,9 @@ loadtest.soak: ## Mixed traffic for hours, usage make loadtest.soak RATE=500 SOA
 .PHONY: loadtest.spike
 loadtest.spike: ## One hot code at 10x the base rate, usage make loadtest.spike K6_ARGS="-e BASE_RATE=100 -e SPIKE_RATE=1000"
 	$(K6_RUN) $(K6_IMAGE) run /loadtest/scenarios/spike.js
+
+.PHONY: loadtest.clean
+loadtest.clean: create.envfile ## Deletes the load-test users (lt-*@fupi.test) and their urls from the database (MODE=ha or single), and the seed file
+	@$(PG_ADMIN) -d $${PG_DATABASE:-fupidb} -v ON_ERROR_STOP=1 -c "DELETE FROM urls WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'lt-%@fupi.test')" -c "DELETE FROM users WHERE email LIKE 'lt-%@fupi.test'"
+	@rm -f $(ROOT_DIR)/loadtest/.data/seed.json
+	@echo "load-test users and urls deleted; cached redirects expire on their own (REDIRECT_CACHE_TTL)"
