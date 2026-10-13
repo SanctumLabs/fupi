@@ -2,13 +2,19 @@
 // VU keeps its own session, starting from the seeded user's tokens, and refreshes shortly before the access token
 // expires. Module state is per VU in k6, so sessions are never shared.
 import http from 'k6/http';
+import { SharedArray } from 'k6/data';
 import encoding from 'k6/encoding';
 import { API, JSON_HEADERS, SEED_FILE } from './config.js';
 import { tokenRefreshes } from './metrics.js';
 
 const REFRESH_MARGIN_S = parseInt(__ENV.REFRESH_MARGIN_S || '120', 10);
 
-export const seed = JSON.parse(open(SEED_FILE));
+// Parsed once and shared by every VU: parsing the seed per VU made starting VUs slow enough, under load, to starve the
+// scenarios of VUs ("Error while allocating unplanned VU").
+export const seed = {
+  users: new SharedArray('seed users', () => JSON.parse(open(SEED_FILE)).users),
+  urls: new SharedArray('seed urls', () => JSON.parse(open(SEED_FILE)).urls),
+};
 
 let session = null;
 

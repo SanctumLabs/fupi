@@ -171,3 +171,28 @@ audit write (heap plus GIN indexes on the hottest table) is the first thing to l
 at about 150/s, so treat these as indicative: they vary between runs and with the state of the database.
 Whether the trigger can be made cheaper (drop the GIN indexes, write the audit row asynchronously) is a product
 decision, not made here.
+
+## HA mode and failure injection (not run yet)
+
+HA is for failover behaviour, not capacity: on one laptop it mostly measures Docker overhead. It needs far more memory
+than single mode (3 Postgres + etcd + haproxy, 6 Redis, 3 Kafka) and uses the same ports as single mode, so stop the
+single stacks first (`make infra.clean` removes their data; `infra.<stack>.down` keeps it). Plan for one run per
+failure, with `mixed` at about half of its single-mode ceiling so a failover is not confused with saturation:
+
+```bash
+make infra.core.up infra.app.up MODE=ha            # app-ha lists all six Redis nodes and three Kafka brokers
+make loadtest.seed USERS=20 URLS_PER_USER=100
+make loadtest.run SCENARIO=mixed K6_ARGS="-e RATE=200 -e DURATION=10m"   # in one terminal
+# in another, after about 2 minutes, one failure at a time:
+make infra.patroni.list MODE=ha                    # find the leader
+docker stop fupi-patroni-1                         # Postgres leader: expect a short burst of 5xx on create/manage, none on cached redirects
+docker start fupi-patroni-1
+docker stop fupi-redis-1                           # a Redis master: expect redirects to fall back to Postgres, and the rate limiter fallback
+docker start fupi-redis-1
+docker stop fupi-kafka-1                           # a broker: redirects must be unaffected (analytics is best-effort, ADR-0021)
+docker start fupi-kafka-1
+```
+
+Record, per failure: seconds of elevated errors (`http_req_failed` over time, so add `--out` to Prometheus or read the
+app's access log), whether the stack recovered without restarting the app, and the `token_refreshes` and `unauthorized`
+counters (they must not move). Container names depend on the compose project; check `make infra.ps MODE=ha`.

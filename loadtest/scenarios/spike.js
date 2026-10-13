@@ -13,7 +13,15 @@ const SPIKE_RATE = parseInt(__ENV.SPIKE_RATE || '1000', 10);
 const SPIKE_DURATION = __ENV.SPIKE_DURATION || '1m';
 const LEAD = __ENV.LEAD || '1m';
 const RAMP = 5; // seconds up and down
-const hot = seed.urls.find((u) => u.short_code === __ENV.HOT_CODE) || seed.urls[0];
+function findHot() {
+  for (let i = 0; i < seed.urls.length; i++) {
+    if (seed.urls[i].short_code === __ENV.HOT_CODE) {
+      return seed.urls[i];
+    }
+  }
+  return seed.urls[0];
+}
+const hot = findHot();
 const total = 2 * seconds(LEAD) + seconds(SPIKE_DURATION) + 2 * RAMP;
 
 export const options = {
