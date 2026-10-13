@@ -154,6 +154,15 @@ func (suite *UrlHandlersTestSuite) TestCreate_MissingFieldsAre422() {
 	}
 }
 
+func (suite *UrlHandlersTestSuite) TestCreate_MalformedExpiryIs422NamingTheProblem() {
+	status, body, _ := suite.do("POST", baseURI+"/urls",
+		`{"original_url": "https://example.com/some/long/path", "expires_on": "2099-01-01T00:00:00Z00:00"}`)
+
+	suite.Equal(fiber.StatusUnprocessableEntity, status)
+	suite.Contains(body["message"], "parsing time")
+	suite.NotEqual("request body is not valid JSON", body["message"])
+}
+
 func (suite *UrlHandlersTestSuite) TestCreate_InvalidUrlIs400() {
 	code, _ := url.NewShortCode("000abc")
 	suite.mockGenerator.EXPECT().Next(gomock.Any()).Return(code, nil)

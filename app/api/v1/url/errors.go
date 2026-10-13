@@ -1,6 +1,7 @@
 package urlapi
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 
@@ -42,4 +43,14 @@ func conflictMessage(err error) string {
 // respondValidationError reports a malformed or incomplete payload.
 func respondValidationError(ctx *fiber.Ctx, message string) error {
 	return ctx.Status(fiber.StatusUnprocessableEntity).JSON(errorResponseDto{Message: message})
+}
+
+// respondBodyError reports a request body that could not be decoded. A syntax error keeps the generic message; any
+// other decode failure (a bad timestamp, a wrong field type) names the field's problem so the caller can fix it.
+func respondBodyError(ctx *fiber.Ctx, err error) error {
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		return respondValidationError(ctx, "request body is not valid JSON")
+	}
+	return respondValidationError(ctx, "request body is invalid: "+err.Error())
 }

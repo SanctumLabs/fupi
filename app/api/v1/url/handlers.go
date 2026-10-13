@@ -34,7 +34,7 @@ func (rtr *urlRouter) create(ctx *fiber.Ctx) error {
 
 	var request createUrlRequestDto
 	if err := ctx.BodyParser(&request); err != nil {
-		return respondValidationError(ctx, "request body is not valid JSON")
+		return respondBodyError(ctx, err)
 	}
 	if request.OriginalUrl == "" || request.ExpiresOn == nil {
 		return respondValidationError(ctx, "original_url and expires_on are required")
@@ -147,7 +147,7 @@ func (rtr *urlRouter) update(ctx *fiber.Ctx) error {
 
 	var request updateUrlRequestDto
 	if err := ctx.BodyParser(&request); err != nil {
-		return respondValidationError(ctx, "request body is not valid JSON")
+		return respondBodyError(ctx, err)
 	}
 	if request.ExpiresOn == nil && request.Keywords == nil {
 		return respondValidationError(ctx, "expires_on or keywords is required")
