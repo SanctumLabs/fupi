@@ -68,7 +68,8 @@ seconds; the app's own defaults are 10, 30, 300 and 100 per minute. Run `make in
 `RATE_LIMIT_ENABLED=false` turns the limiter off altogether.
 
 `make loadtest.ratelimit` checks the limiter itself against the redirect group. It needs a small limit, since the
-default would take a million requests, and a window much longer than the run so the bucket does not refill meanwhile:
+default would take a million requests, and a window much longer than the run so the bucket does not refill meanwhile.
+Start the API with that limit first; the target refuses to run unless `GROUP_MAX` and `GROUP_WINDOW_S` are given:
 
 ```bash
 make loadtest.app.up MODE=single LOADTEST_LIMITS="RATE_LIMIT_AUTH_MAX=100000 RATE_LIMIT_CREATE_MAX=100000 RATE_LIMIT_DEFAULT_MAX=100000 RATE_LIMIT_REDIRECT_MAX=200 RATE_LIMIT_REDIRECT_WINDOW=3600"
