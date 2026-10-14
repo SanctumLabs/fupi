@@ -23,7 +23,7 @@ func NewTokenService(config config.AuthConfig, jwtGen jwt.JwtGen) ports.TokenSer
 }
 
 func (svc *tokenService) GenerateAccessToken(userID string) (string, error) {
-	token, err := svc.jwt.Encode(userID, svc.config.Jwt.Secret, svc.config.Jwt.Issuer, svc.config.Jwt.ExpireDelta)
+	token, err := svc.jwt.Encode(userID, svc.config.Secret, svc.config.Issuer, svc.config.ExpireDelta)
 	if err != nil {
 		return "", fmt.Errorf("failed to create access token: %w", err)
 	}
@@ -31,7 +31,7 @@ func (svc *tokenService) GenerateAccessToken(userID string) (string, error) {
 }
 
 func (svc *tokenService) GenerateRefreshToken(userID string) (string, error) {
-	token, err := svc.jwt.EncodeRefreshToken(userID, svc.config.Jwt.Secret, svc.config.Jwt.Issuer, svc.config.Jwt.RefreshExpireDelta)
+	token, err := svc.jwt.EncodeRefreshToken(userID, svc.config.Secret, svc.config.Issuer, svc.config.RefreshExpireDelta)
 	if err != nil {
 		return "", fmt.Errorf("failed to create refresh token: %w", err)
 	}
@@ -43,7 +43,7 @@ func (svc *tokenService) GenerateRefreshToken(userID string) (string, error) {
 func (svc *tokenService) Authenticate(token string) (string, error) {
 	// jwt.Decode's second return is the issued-at time, not the expiry its name suggests; no
 	// caller needs it, so the port does not surface it.
-	userID, _, err := svc.jwt.Decode(token, svc.config.Jwt.Issuer, svc.config.Jwt.Secret)
+	userID, _, err := svc.jwt.Decode(token, svc.config.Issuer, svc.config.Secret)
 	if err != nil {
 		return "", errdefs.Unauthorized(fmt.Errorf("%w: %w", errdefs.ErrTokenInvalid, err))
 	}

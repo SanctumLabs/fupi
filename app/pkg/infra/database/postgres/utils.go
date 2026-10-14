@@ -54,7 +54,7 @@ func WithTransactionRetry[T any](
 			var result T
 			return result, fmt.Errorf("failed to begin transaction: %w", err)
 		}
-		defer tx.Rollback(ctx) // This is safe even if commit succeeds
+		defer func() { _ = tx.Rollback(ctx) }() // This is safe even if commit succeeds
 
 		result, err := operation(tx)
 		if err != nil {

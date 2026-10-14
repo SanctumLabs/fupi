@@ -312,7 +312,7 @@ func (url *URL) transition(to URLStatus, from ...URLStatus) error {
 }
 
 func (url *URL) touch() {
-	url.EntityTimestamp = url.EntityTimestamp.WithUpdatedAt(time.Now())
+	url.EntityTimestamp = url.WithUpdatedAt(time.Now())
 }
 
 // LoadedUpdatedAt is the updated time the url was loaded with: the version an update is guarded with, so a writer that
