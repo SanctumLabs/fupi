@@ -299,7 +299,7 @@ func (user *User) transition(to UserStatus, from ...UserStatus) error {
 }
 
 func (user *User) touch() {
-	user.EntityTimestamp = user.EntityTimestamp.WithUpdatedAt(time.Now())
+	user.EntityTimestamp = user.WithUpdatedAt(time.Now())
 }
 
 // Prefix returns the url prefix for logging

@@ -29,6 +29,9 @@ jobs:
     with:
       go-version: ${{ matrix.go-version }}
       command: make test.coverage
+      # go-test.yml always starts a database container and fails on an empty image name
+      database-image-name: postgres
+      database-image-version: 18-alpine
     secrets:
       codacy_token: ${{ secrets.CODACY_PROJECT_TOKEN }}
 

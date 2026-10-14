@@ -6,16 +6,6 @@ const (
 	// LogTypeRequest is Request log type
 	LogTypeRequest = "request"
 
-	// Field names that defines log schema
-	logFieldTimeStamp = "time"
-	logFieldLevel     = "level"
-	logFieldType      = "type"
-	logFieldScope     = "scope"
-	logFieldMessage   = "msg"
-	logFieldInstance  = "instance"
-	logFieldVer       = "ver"
-	logFieldAppID     = "app_id"
-
 	reset = "\033[0m"
 
 	black        = 30

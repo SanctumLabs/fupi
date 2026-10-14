@@ -147,7 +147,7 @@ func (c *client) post(path, token string, payload any, want int) ([]byte, error)
 			return nil, err
 		}
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode == http.StatusTooManyRequests {
 			wait, _ := strconv.Atoi(resp.Header.Get("Retry-After"))

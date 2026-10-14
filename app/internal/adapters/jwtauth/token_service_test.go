@@ -68,10 +68,10 @@ func TestTokenService_Authenticate_Rejects(t *testing.T) {
 	require.NoError(t, err)
 
 	otherIssuer := testConfig()
-	otherIssuer.Jwt.Issuer = "someone-else"
+	otherIssuer.Issuer = "someone-else"
 
 	otherSecret := testConfig()
-	otherSecret.Jwt.Secret = "a-different-secret"
+	otherSecret.Secret = "a-different-secret"
 
 	cases := map[string]struct {
 		svc   ports.TokenService
@@ -94,7 +94,7 @@ func TestTokenService_Authenticate_Rejects(t *testing.T) {
 
 func TestTokenService_Authenticate_RejectsExpiredToken(t *testing.T) {
 	expired := testConfig()
-	expired.Jwt.ExpireDelta = -1 // already past
+	expired.ExpireDelta = -1 // already past
 
 	svc := NewTokenService(expired, jwt.New())
 	token, err := svc.GenerateAccessToken(entity.IDToString(entity.NewID()))
