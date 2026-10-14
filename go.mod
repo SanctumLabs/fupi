@@ -16,7 +16,7 @@ require (
 	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
 	github.com/rs/xid v1.4.0
-	github.com/sirupsen/logrus v1.9.1
+	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/swaggo/files v0.0.0-20220728132757-551d4a08d97a
 	github.com/swaggo/gin-swagger v1.5.3
