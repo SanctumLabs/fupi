@@ -36,11 +36,11 @@ func TestErrorHandler_LogsADistinctErrorOncePerInterval(t *testing.T) {
 		handler.Handle(refused)
 		clock.now = clock.now.Add(2 * time.Second)
 	}
-	assert.Equal(t, 1, strings.Count(buf.String(), "telemetry export failed"), "20 repeats within a minute are one line")
+	assert.Equal(t, 1, strings.Count(buf.String(), "opentelemetry error"), "20 repeats within a minute are one line")
 
 	clock.now = clock.now.Add(time.Minute)
 	handler.Handle(refused)
-	assert.Equal(t, 2, strings.Count(buf.String(), "telemetry export failed"), "the same error is logged again after the interval")
+	assert.Equal(t, 2, strings.Count(buf.String(), "opentelemetry error"), "the same error is logged again after the interval")
 }
 
 func TestErrorHandler_LogsEachDistinctErrorOnItsOwn(t *testing.T) {
@@ -51,7 +51,7 @@ func TestErrorHandler_LogsEachDistinctErrorOnItsOwn(t *testing.T) {
 	handler.Handle(errors.New("metrics: connection refused"))
 	handler.Handle(errors.New("traces: connection refused"))
 
-	assert.Equal(t, 2, strings.Count(buf.String(), "telemetry export failed"))
+	assert.Equal(t, 2, strings.Count(buf.String(), "opentelemetry error"))
 	assert.Contains(t, buf.String(), "traces: connection refused")
 	assert.Contains(t, buf.String(), "metrics: connection refused")
 }
@@ -75,4 +75,20 @@ func TestErrorHandler_ForgetsOldErrorsWhenTooManyAreDistinct(t *testing.T) {
 	}
 
 	assert.LessOrEqual(t, len(handler.lastSeen), maxTrackedErrors)
+}
+
+// A stream of always-different messages passes the per-message check every time, so the line budget has to stop it.
+func TestErrorHandler_LogsAtMostAFewLinesPerIntervalWhateverTheMessages(t *testing.T) {
+	buf := captureDefaultLogger(t)
+	clock := &fakeClock{now: time.Unix(1_000, 0)}
+	handler := newErrorHandler(time.Minute, clock.Now)
+
+	for i := range 100 {
+		handler.Handle(fmt.Errorf("error number %d", i))
+	}
+	assert.Equal(t, maxLinesPerInterval, strings.Count(buf.String(), "opentelemetry error"))
+
+	clock.now = clock.now.Add(time.Minute)
+	handler.Handle(errors.New("a new error after the interval"))
+	assert.Equal(t, maxLinesPerInterval+1, strings.Count(buf.String(), "opentelemetry error"))
 }

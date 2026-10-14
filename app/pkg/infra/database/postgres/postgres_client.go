@@ -72,7 +72,7 @@ func NewPostgresClient(config PostgresDatabaseConfig) (database.PostgresDatabase
 	poolConfig.ConnConfig.ConnectTimeout = config.ConnTimeout
 
 	// Trace every query and transaction step. The SQL text is recorded, its arguments are not (otelpgx's default); keep it so.
-	poolConfig.ConnConfig.Tracer = otelpgx.NewTracer(otelpgx.WithSpanNameFunc(spanName))
+	poolConfig.ConnConfig.Tracer = operationTracer{otelpgx.NewTracer(otelpgx.WithSpanNameFunc(spanName))}
 
 	// Use a local counter to avoid mutating the struct field
 	attemptsLeft := pg.connAttempts

@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/sanctumlabs/fupi/app/api/probes"
 	"github.com/sanctumlabs/fupi/app/config"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,11 +26,21 @@ func lookupOf(env map[string]string) config.Lookup {
 	}
 }
 
+// stubTelemetry replaces telemetry.Start for the test, so run neither pushes test telemetry into a developer's local
+// collector nor waits for a flush to a collector that is not there.
+func stubTelemetry(t *testing.T) {
+	t.Helper()
+	previous := startTelemetry
+	startTelemetry = func(context.Context, telemetry.Options) func() { return func() {} }
+	t.Cleanup(func() { startTelemetry = previous })
+}
+
 // Postgres is the one required dependency: with it unreachable the process must exit with an error, not hang or serve.
 func TestRun_ReturnsAnErrorWhenPostgresIsUnreachable(t *testing.T) {
 	if testing.Short() {
 		t.Skip("takes about three seconds of connection retries")
 	}
+	stubTelemetry(t)
 	cfg, err := config.Load(lookupOf(map[string]string{
 		"DATABASE_PORT": "1", "DATABASE_CONN_TIMEOUT": "1", "REDIS_ADDRESS": "127.0.0.1:1",
 	}))

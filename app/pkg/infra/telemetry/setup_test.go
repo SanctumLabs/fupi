@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -22,11 +23,27 @@ import (
 	"google.golang.org/grpc"
 )
 
+// TestMain clears the variables a developer's shell may export, which would turn Setup off or point it away from the
+// collectors these tests start. A test that needs one sets it with t.Setenv.
+func TestMain(m *testing.M) {
+	for _, name := range []string{
+		"OTEL_SDK_DISABLED",
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+	} {
+		_ = os.Unsetenv(name)
+	}
+	os.Exit(m.Run())
+}
+
 // collector records what is exported to it.
 type collector struct {
-	mu      sync.Mutex
-	traces  []*coltracepb.ExportTraceServiceRequest
-	metrics []*colmetricspb.ExportMetricsServiceRequest
+	mu sync.Mutex
+	// holdTraces, when set, makes the trace Export block until it is closed.
+	holdTraces chan struct{}
+	traces     []*coltracepb.ExportTraceServiceRequest
+	metrics    []*colmetricspb.ExportMetricsServiceRequest
 }
 
 func (c *collector) traceRequests() []*coltracepb.ExportTraceServiceRequest {
@@ -46,7 +63,13 @@ type traceService struct {
 	c *collector
 }
 
-func (s *traceService) Export(_ context.Context, req *coltracepb.ExportTraceServiceRequest) (*coltracepb.ExportTraceServiceResponse, error) {
+func (s *traceService) Export(ctx context.Context, req *coltracepb.ExportTraceServiceRequest) (*coltracepb.ExportTraceServiceResponse, error) {
+	if s.c.holdTraces != nil {
+		select {
+		case <-s.c.holdTraces:
+		case <-ctx.Done():
+		}
+	}
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
 	s.c.traces = append(s.c.traces, req)
@@ -290,7 +313,7 @@ func TestSetup_InstallsTheRateLimitedErrorHandler(t *testing.T) {
 		otel.Handle(errors.New("export failed: connection refused"))
 	}
 
-	assert.Equal(t, 1, strings.Count(buf.String(), "telemetry export failed"))
+	assert.Equal(t, 1, strings.Count(buf.String(), "opentelemetry error"))
 }
 
 func TestMetricReaderOptions_DefaultsToTheStacksScrapeInterval(t *testing.T) {
@@ -382,4 +405,25 @@ func TestSetup_AnEndpointForOneSignalLeavesTheOtherSignalOnTheDefault(t *testing
 	assert.Empty(t, tracesCollector.metricRequests())
 	assert.NotEmpty(t, defaultCollector.metricRequests(), "metrics have no variable and take the default")
 	assert.Empty(t, defaultCollector.traceRequests())
+}
+
+// A trace flush that hangs must not use up the deadline the metric flush needs.
+func TestSetup_ShutdownFlushesMetricsWhileTheTraceFlushHangs(t *testing.T) {
+	c, endpoint := startCollector(t)
+	release := make(chan struct{})
+	c.holdTraces = release
+	t.Cleanup(func() { close(release) })
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
+	resetGlobals(t)
+	shutdown, err := Setup(context.Background(), Options{})
+	require.NoError(t, err)
+	_, span := otel.Tracer("test").Start(context.Background(), "unit-of-work")
+	span.End()
+	counter, err := otel.Meter("test").Int64Counter("test.requests")
+	require.NoError(t, err)
+	counter.Add(context.Background(), 1)
+
+	_ = shutdownWithin(t, shutdown, time.Second)
+
+	assert.NotEmpty(t, c.metricRequests(), "the metrics were flushed although the trace export never returned")
 }
