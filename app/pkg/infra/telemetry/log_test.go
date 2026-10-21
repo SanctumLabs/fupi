@@ -126,3 +126,55 @@ func TestServiceName(t *testing.T) {
 	t.Setenv("OTEL_SERVICE_NAME", "  fupi-api ")
 	assert.Equal(t, "fupi-api", ServiceName("fupi-worker"), "the variable wins over the fallback")
 }
+
+func TestServiceName_ReadsServiceNameFromTheResourceAttributes(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "")
+
+	for attrs, want := range map[string]string{
+		"service.name=fupi-api": "fupi-api",
+		"deployment.environment.name=prod, service.name = fupi%20api": "fupi api",
+		"custom.service.name=other":                                   "fupi-worker",
+		"service.name=":                                               "fupi-worker",
+		"":                                                            "fupi-worker",
+	} {
+		t.Setenv("OTEL_RESOURCE_ATTRIBUTES", attrs)
+		assert.Equal(t, want, ServiceName("fupi-worker"), attrs)
+	}
+
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=from-attributes")
+	t.Setenv("OTEL_SERVICE_NAME", "from-variable")
+	assert.Equal(t, "from-variable", ServiceName("fupi-worker"), "OTEL_SERVICE_NAME wins, as it does in the resource")
+}
+
+// The IDs Unsampled makes up belong to no trace, so a line carrying them would point at nothing.
+func TestNewLogger_LeavesOutTheSyntheticIDsOfUnsampled(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "text", slog.LevelInfo, "fupi")
+
+	logger.InfoContext(Unsampled(context.Background()), "readiness check")
+
+	assert.NotContains(t, buf.String(), "trace_id")
+	assert.NotContains(t, buf.String(), "span_id")
+}
+
+func TestNewLogger_KeepsTheIDsOfARealSpanUnderUnsampled(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "text", slog.LevelInfo, "fupi")
+	sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled})
+	ctx := trace.ContextWithSpanContext(context.Background(), sc)
+
+	logger.InfoContext(Unsampled(ctx), "readiness check")
+
+	assert.Contains(t, buf.String(), "trace_id="+sc.TraceID().String())
+}
+
+// Under WithGroup every attribute of the record, these two included, is written inside the group.
+func TestNewLogger_UnderWithGroupTheIDsAreInsideTheGroup(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "text", slog.LevelInfo, "fupi").WithGroup("request")
+	sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}})
+
+	logger.InfoContext(trace.ContextWithSpanContext(context.Background(), sc), "hello")
+
+	assert.Contains(t, buf.String(), "request.trace_id="+sc.TraceID().String())
+}

@@ -59,6 +59,7 @@ func OTelMiddleware(cfg OTelConfig) fiber.Handler {
 		otel.Handle(err)
 	}
 	skip := pathSet(cfg.SkipPaths)
+	routes := &routeTable{}
 
 	return func(c *fiber.Ctx) error {
 		// fasthttp reuses its buffers once the handler returns, and spans and metrics are exported afterwards, so
@@ -95,7 +96,7 @@ func OTelMiddleware(cfg OTelConfig) fiber.Handler {
 		statusAttr := attribute.Int("http.response.status_code", status)
 		spanAttrs := []attribute.KeyValue{statusAttr}
 		metricAttrs := []attribute.KeyValue{methodAttr, schemeAttr, statusAttr}
-		if route, matched := routeTemplate(c, path); matched {
+		if route, matched := routes.template(c, path); matched {
 			routeAttr := attribute.String("http.route", route)
 			spanAttrs = append(spanAttrs, routeAttr)
 			metricAttrs = append(metricAttrs, routeAttr)

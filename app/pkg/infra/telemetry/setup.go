@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -96,8 +97,14 @@ func Setup(ctx context.Context, opts Options) (shutdown func(context.Context) er
 	otel.SetMeterProvider(meterProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
+	// The two flushes run side by side, so a slow trace flush cannot use up the deadline the metric flush needs.
 	return func(ctx context.Context) error {
-		return errors.Join(tracerProvider.Shutdown(ctx), meterProvider.Shutdown(ctx))
+		var traceErr, metricErr error
+		var wg sync.WaitGroup
+		wg.Go(func() { traceErr = tracerProvider.Shutdown(ctx) })
+		wg.Go(func() { metricErr = meterProvider.Shutdown(ctx) })
+		wg.Wait()
+		return errors.Join(traceErr, metricErr)
 	}, nil
 }
 
