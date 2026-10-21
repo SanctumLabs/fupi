@@ -9,9 +9,8 @@ import (
 )
 
 type inMemQueueMessageConsumer struct {
-	workerPoolSize int
-	queueName      string
-	inMemQueue     *InMemQueue
+	queueName  string
+	inMemQueue *InMemQueue
 }
 
 var _ InMemQueueMessageConsumer = (*inMemQueueMessageConsumer)(nil)

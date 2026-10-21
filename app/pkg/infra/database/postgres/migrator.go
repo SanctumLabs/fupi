@@ -82,7 +82,7 @@ func Migrate(databaseURL string, migrationPath string, inDocker bool) error {
 	}
 
 	err = m.Up()
-	defer m.Close()
+	defer func() { _, _ = m.Close() }()
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		slog.ErrorContext(ctx, "migrate: up error", "error", err)
 		return err

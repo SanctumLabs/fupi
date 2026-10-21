@@ -52,7 +52,7 @@ func New(cfg *LogConfig) Logger {
 	if cfg.Level != "" {
 		levelFromEnv, err := zapcore.ParseLevel(cfg.Level)
 		if err != nil {
-			log.Println(fmt.Errorf("Invalid level %s provided, defaulting to INFO: %w", cfg.Level, err))
+			log.Println(fmt.Errorf("invalid level %s provided, defaulting to INFO: %w", cfg.Level, err))
 		}
 
 		level = levelFromEnv
@@ -145,7 +145,7 @@ func (l *appLogger) WithContext(ctx context.Context, args ...interface{}) Logger
 
 // WithoutCaller returns a logger that does not output the caller field and location of the calling code.
 func (l *appLogger) WithoutCaller() Logger {
-	return &appLogger{l.SugaredLogger.WithOptions(zap.WithCaller(false))}
+	return &appLogger{l.WithOptions(zap.WithCaller(false))}
 }
 
 // FromContext returns a logger from context. If none found, instantiate a new logger.

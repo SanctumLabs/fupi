@@ -11,8 +11,6 @@ import (
 	"github.com/sanctumlabs/fupi/app/pkg/infra/cache"
 )
 
-const _statsEnabled = true
-
 // redisClient is a wrapper around a go-redis universal client
 type redisClient struct {
 	// statsEnabled sets enabling stats to true
