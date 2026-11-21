@@ -239,7 +239,7 @@ jobs:
           persist-credentials: false
 
       # https://github.com/superfly/flyctl-actions
-      - uses: superfly/flyctl-actions/setup-flyctl@1.5
+      - uses: superfly/flyctl-actions/setup-flyctl@1.6
 
       # Secrets reach the script as environment variables, never interpolated into the script text.
       - name: Set secrets and deploy
