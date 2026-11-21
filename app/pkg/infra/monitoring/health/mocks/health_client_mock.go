@@ -10,8 +10,8 @@
 package mockhealth
 
 import (
-	health "carduka/bidsvc/pkg/infra/monitoring/health"
 	context "context"
+	health "github.com/sanctumlabs/curtz/app/pkg/infra/monitoring/health"
 	reflect "reflect"
 	time "time"
 

@@ -1,3 +1,5 @@
+//go:build legacy
+
 package url
 
 import "github.com/sanctumlabs/curtz/app/internal/core/entities"

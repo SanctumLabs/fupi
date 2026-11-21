@@ -1,3 +1,5 @@
+//go:build legacy
+
 package middleware
 
 import "github.com/gin-gonic/gin"

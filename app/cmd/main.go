@@ -1,3 +1,5 @@
+//go:build legacy
+
 package main
 
 import (
@@ -10,13 +12,13 @@ import (
 	authApi "github.com/sanctumlabs/curtz/app/api/v1/auth"
 	"github.com/sanctumlabs/curtz/app/api/v1/url"
 	"github.com/sanctumlabs/curtz/app/config"
+	cache "github.com/sanctumlabs/curtz/app/internal/adapters/redis"
 	"github.com/sanctumlabs/curtz/app/internal/core/urlsvc"
 	urlReadSvc "github.com/sanctumlabs/curtz/app/internal/core/urlsvc/read"
 	urlWriteSvc "github.com/sanctumlabs/curtz/app/internal/core/urlsvc/write"
 	"github.com/sanctumlabs/curtz/app/internal/core/usersvc"
 	"github.com/sanctumlabs/curtz/app/internal/repositories"
 	"github.com/sanctumlabs/curtz/app/internal/services/auth"
-	"github.com/sanctumlabs/curtz/app/internal/services/cache"
 	"github.com/sanctumlabs/curtz/app/internal/services/notifications"
 	"github.com/sanctumlabs/curtz/app/internal/services/notifications/email"
 	"github.com/sanctumlabs/curtz/app/pkg/jwt"

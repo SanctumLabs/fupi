@@ -1,7 +1,7 @@
 package inmemqueue
 
 import (
-	"carduka/bidsvc/pkg/infra/queue"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/queue"
 	"sync"
 
 	"github.com/google/wire"

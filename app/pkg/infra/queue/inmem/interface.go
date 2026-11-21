@@ -1,6 +1,6 @@
 package inmemqueue
 
-import "carduka/bidsvc/pkg/infra/queue"
+import "github.com/sanctumlabs/curtz/app/pkg/infra/queue"
 
 // publishers
 type InMemQueueMessagePublisher interface {

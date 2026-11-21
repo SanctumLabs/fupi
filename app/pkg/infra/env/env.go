@@ -46,6 +46,27 @@ func (ec *EnvConfig) EnvIntOr(key string, def int) int {
 	return def
 }
 
+// EnvInt32Or gets an environment variable by the given key as int32,
+// if not found or invalid def is returned.
+func (ec *EnvConfig) EnvInt32Or(key string, def int32) int32 {
+	if value, ok := os.LookupEnv(key); ok {
+		slog.Debug("EnvConfig> env key found", "key", key, "value", value)
+		v, err := strconv.ParseInt(value, 10, 32)
+		if err != nil {
+			slog.Error(
+				"Failed to convert env to int32. Defaulting env key",
+				"key", key,
+				"value", value,
+				"def", def,
+				"error", err,
+			)
+			return def
+		}
+		return int32(v)
+	}
+	return def
+}
+
 func (ec *EnvConfig) EnvFloatOr(key string, def float32) float32 {
 	if value, ok := os.LookupEnv(key); ok {
 		v, err := strconv.ParseFloat(value, 32)

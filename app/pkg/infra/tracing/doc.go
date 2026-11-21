@@ -27,7 +27,7 @@
 //	import (
 //		"context"
 //		"log/slog"
-//		"carduka/bidsvc/pkg/infra/tracing"
+//		"github.com/sanctumlabs/curtz/app/pkg/infra/tracing"
 //			"go.opentelemetry.io/otel"
 //			"go.opentelemetry.io/otel/trace"
 //	)

@@ -1,10 +1,10 @@
 package interceptors
 
 import (
-	"carduka/bidsvc/pkg/infra/monitoring/metrics"
-	prometheusmetrics "carduka/bidsvc/pkg/infra/monitoring/metrics/prometheus"
-	envutils "carduka/bidsvc/pkg/utils/env"
 	"context"
+	envutils "github.com/sanctumlabs/curtz/app/pkg/infra/env"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/monitoring/metrics"
+	prometheusmetrics "github.com/sanctumlabs/curtz/app/pkg/infra/monitoring/metrics/prometheus"
 
 	"google.golang.org/grpc"
 )
@@ -13,7 +13,7 @@ import (
 func GrpcServerMetricsInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		// track metrics per handler if metrics are enabled, this has been defaulted to false by default
-		if envutils.EnvBoolOr(metrics.EnvMetricsEnabled, false) {
+		if envutils.NewEnvConfig().EnvBoolOr(metrics.EnvMetricsEnabled, false) {
 			methodName := extractMethodName(info.FullMethod)
 			defer prometheusmetrics.TrackMetrics(methodName, info.FullMethod)()
 		}

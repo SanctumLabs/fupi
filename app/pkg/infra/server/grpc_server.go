@@ -1,10 +1,10 @@
 package server
 
 import (
-	"carduka/bidsvc/pkg/infra/server/interceptors"
-	"carduka/bidsvc/pkg/infra/server/middleware"
 	"context"
 	"fmt"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/server/interceptors"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/server/middleware"
 	"log/slog"
 	"net"
 	"os"

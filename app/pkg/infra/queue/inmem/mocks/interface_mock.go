@@ -10,8 +10,8 @@
 package mockinmemqueue
 
 import (
-	queue "carduka/bidsvc/pkg/infra/queue"
 	context "context"
+	queue "github.com/sanctumlabs/curtz/app/pkg/infra/queue"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"

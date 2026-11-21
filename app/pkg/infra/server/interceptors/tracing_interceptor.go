@@ -1,8 +1,8 @@
 package interceptors
 
 import (
-	"carduka/bidsvc/pkg/infra/tracing"
 	"context"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/tracing"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

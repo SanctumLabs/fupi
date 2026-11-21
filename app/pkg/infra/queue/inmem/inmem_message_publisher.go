@@ -1,8 +1,8 @@
 package inmemqueue
 
 import (
-	"carduka/bidsvc/pkg/infra/queue"
 	"context"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/queue"
 	"log/slog"
 
 	"github.com/google/wire"

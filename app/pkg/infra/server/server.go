@@ -1,10 +1,12 @@
 package server
 
 import (
-	"carduka/bidsvc/pkg/infra/logger"
-	"carduka/bidsvc/pkg/infra/server/middleware"
-	"carduka/bidsvc/pkg/infra/server/router"
 	"fmt"
+	"os"
+
+	"github.com/sanctumlabs/curtz/app/pkg/infra/logger"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/server/middleware"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/server/router"
 
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/contrib/swagger"
@@ -35,27 +37,28 @@ func NewServer(cfg ServerConfig) *Server {
 	app.Use(middleware.LoggerMiddleware())
 	app.Use(middleware.CORSMiddleware())
 
-	// TODO: File path is relative to the binary created. This needs to be set accordingly depending on whether running
-	// the binary from the root of the project or from the build directory
-
-	// v1 of the documentation
-	app.Use(middleware.SwaggerMiddleware(
-		swagger.Config{
+	// Swagger specs are optional: the server must still start when they have not been generated
+	// (a fresh checkout, or a test binary running from a different working directory).
+	for _, cfg := range []swagger.Config{
+		{
 			BasePath: "/",
 			Path:     "docs/v1",
-			FilePath: "./api/openapi-spec/bids_service_v1.swagger.json",
-			Title:    "Bids Service V1 API Docs",
+			FilePath: "./api/openapi-spec/curtz_v1.swagger.json",
+			Title:    "Curtz V1 API Docs",
 		},
-	))
-
-	app.Use(middleware.SwaggerMiddleware(
-		swagger.Config{
+		{
 			BasePath: "/",
 			Path:     "docs/monitoring",
 			FilePath: "./api/openapi-spec/monitoring.swagger.json",
-			Title:    "Bids Service Monitoring API Docs",
+			Title:    "Curtz Monitoring API Docs",
 		},
-	))
+	} {
+		if _, err := os.Stat(cfg.FilePath); err != nil {
+			appLogger.Warnw("skipping swagger docs: spec file not found", "path", cfg.FilePath)
+			continue
+		}
+		app.Use(middleware.SwaggerMiddleware(cfg))
+	}
 
 	app.Use(middleware.HelmetMiddleware())
 	app.Use(middleware.IdempotencyMiddleware())
@@ -80,6 +83,18 @@ func (srv *Server) Listen() error {
 func (srv *Server) Shutdown() error {
 	srv.log.Infow("shutting down server", "port", srv.cfg.Port)
 	return srv.app.Shutdown()
+}
+
+// Use registers a middleware that runs for every request. Call it before RegisterHandlers.
+func (srv *Server) Use(handlers ...fiber.Handler) {
+	for _, handler := range handlers {
+		srv.app.Use(handler)
+	}
+}
+
+// App exposes the underlying Fiber app so tests can drive it in-process without binding a port.
+func (srv *Server) App() *fiber.App {
+	return srv.app
 }
 
 // RegisterHandlers registers all the handlers for the user v1 endpoint
