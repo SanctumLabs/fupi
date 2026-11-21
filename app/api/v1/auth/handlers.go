@@ -36,7 +36,7 @@ func (hdl *authRouter) register(ctx *gin.Context) {
 
 	response := userResponseDto{
 		ID:        user.ID.String(),
-		Email:     user.Email.Value,
+		Email:     user.Email.GetValue(),
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
@@ -92,7 +92,7 @@ func (hdl *authRouter) login(ctx *gin.Context) {
 	response := loginResponseDto{
 		userResponseDto: userResponseDto{
 			ID:        user.ID.String(),
-			Email:     user.Email.Value,
+			Email:     user.Email.GetValue(),
 			CreatedAt: user.CreatedAt,
 			UpdatedAt: user.UpdatedAt,
 		},
