@@ -29,7 +29,7 @@ func NewUserRepo(dbClient *mongo.Collection, ctx context.Context) *UserRepo {
 
 // CreateUser creates a single user
 func (u *UserRepo) CreateUser(user entities.User) (entities.User, error) {
-	if _, err := u.GetByEmail(user.Email.Value); err == nil {
+	if _, err := u.GetByEmail(user.Email.GetValue()); err == nil {
 		return entities.User{}, errdefs.ErrUserExists
 	}
 

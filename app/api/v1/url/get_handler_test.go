@@ -52,29 +52,18 @@ func TestGetByIdReturnsStatusOkForFoundUrl(t *testing.T) {
 	ctx.Request = httpRequest
 	ctx.Params = append(ctx.Params, gin.Param{Key: "id", Value: urlID.String()})
 
-	mockUrl := entities.URL{
-		UserId:      userId,
-		OriginalUrl: originalUrl,
-		CustomAlias: customAlias,
-		ExpiresOn:   expiresOn,
-		BaseEntity: entities.BaseEntity{
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		},
-		Hits:      0,
-		Keywords:  []entities.Keyword{},
-		ShortCode: "3nfoiu",
-	}
+	mockUrl, err := entities.NewUrl(userId, originalUrl, customAlias, expiresOn, []string{})
+	assert.NoError(t, err)
 
 	mockUrlReadSvc.
 		EXPECT().
 		GetById(urlID.String()).
-		Return(mockUrl, nil)
+		Return(*mockUrl, nil)
 
 	urlRouter.getUrlById(ctx)
 
 	var actualResponse map[string]any
-	err := json.Unmarshal([]byte(responseRecorder.Body.Bytes()), &actualResponse)
+	err = json.Unmarshal([]byte(responseRecorder.Body.Bytes()), &actualResponse)
 	assert.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, responseRecorder.Code)
@@ -82,14 +71,14 @@ func TestGetByIdReturnsStatusOkForFoundUrl(t *testing.T) {
 	expectedRespBody := gin.H{
 		"id":           mockUrl.ID.String(),
 		"user_id":      mockUrl.UserId.String(),
-		"original_url": mockUrl.OriginalUrl,
-		"custom_alias": mockUrl.CustomAlias,
-		"short_code":   mockUrl.ShortCode,
-		"keywords":     mockUrl.Keywords,
-		"expires_on":   mockUrl.ExpiresOn.Format(time.RFC3339Nano),
+		"original_url": mockUrl.GetOriginalURL(),
+		"custom_alias": mockUrl.GetCustomAlias(),
+		"short_code":   mockUrl.GetShortCode(),
+		"keywords":     mockUrl.GetKeywords(),
+		"expires_on":   mockUrl.GetExpiresOn().Format(time.RFC3339Nano),
 		"created_at":   mockUrl.CreatedAt.Format(time.RFC3339Nano),
 		"updated_at":   mockUrl.UpdatedAt.Format(time.RFC3339Nano),
-		"hits":         mockUrl.Hits,
+		"hits":         mockUrl.GetHits(),
 	}
 
 	if _, ok := actualResponse["id"]; ok {
@@ -114,17 +103,17 @@ func TestGetByIdReturnsStatusOkForFoundUrl(t *testing.T) {
 
 	if _, ok := actualResponse["short_code"]; ok {
 		assert.True(t, ok)
-		assert.Equal(t, expectedRespBody["short_code"], mockUrl.ShortCode)
+		assert.Equal(t, expectedRespBody["short_code"], mockUrl.GetShortCode())
 	}
 
 	if _, ok := actualResponse["keywords"]; ok {
 		assert.True(t, ok)
-		assert.Equal(t, expectedRespBody["keywords"], mockUrl.Keywords)
+		assert.Equal(t, expectedRespBody["keywords"], mockUrl.GetKeywords())
 	}
 
 	if _, ok := actualResponse["hits"]; ok {
 		assert.True(t, ok)
-		assert.Equal(t, expectedRespBody["hits"], mockUrl.Hits)
+		assert.Equal(t, expectedRespBody["hits"], mockUrl.GetHits())
 	}
 
 	if _, ok := actualResponse["updated_at"]; ok {

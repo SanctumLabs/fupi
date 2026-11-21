@@ -13,5 +13,9 @@ const (
 	PopularHits = 5
 )
 
-// ShortCodeRegex is regex to check if a string looks like short code
-var ShortCodeRegex, _ = regexp.Compile("^[a-zA-Z0-9]{4,12}$")
+var (
+	// ShortCodeRegex is regex to check if a string looks like short code
+	ShortCodeRegex      = regexp.MustCompile("^[a-zA-Z0-9]{4,12}$")
+	KeywordRegexPattern = `^[a-zA-Z0-9-_]+$`
+	KeywordRegex        = regexp.MustCompile(KeywordRegexPattern)
+)

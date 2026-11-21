@@ -35,7 +35,7 @@ var testCases = []testCase{
 		customAlias: "",
 		keywords:    []string{},
 		expiresOn:   time.Now().Add(time.Hour + 1),
-		expectedErr: errdefs.ErrInvalidUrlId,
+		expectedErr: errdefs.ErrURLIdInvalid,
 	},
 	{
 		name:        "invalid custom alias should return error",

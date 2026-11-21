@@ -106,25 +106,17 @@ var _ = Describe("Update URL Handler", func() {
 		expiresOn := time.Now().Add(time.Hour * 1)
 		shortCode, _ := encoding.GetUniqueShortCode()
 
-		mockUrl := entities.URL{
-			UserId:      identifier.New().FromString(userId),
-			OriginalUrl: originalUrl,
-			CustomAlias: customAlias,
-			ExpiresOn:   expiresOn,
-			BaseEntity: entities.BaseEntity{
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			},
-			Hits:      0,
-			Keywords:  []entities.Keyword{},
-			ShortCode: shortCode,
-		}
+		mockUrl, err := entities.NewUrl(identifier.New().FromString(userId), originalUrl, customAlias, expiresOn, []string{})
+		assert.NoError(GinkgoT(), err)
+
+		err = mockUrl.SetShortCode(shortCode)
+		assert.NoError(GinkgoT(), err)
 
 		It("Invalid CustomAlias field", func() {
 			mockUrlReadSvc.
 				EXPECT().
 				GetById(urlID.String()).
-				Return(mockUrl, nil)
+				Return(*mockUrl, nil)
 
 			expiresOnField := time.Now().Add(time.Hour + 1)
 			requestBody := updateShortUrlDto{
@@ -163,7 +155,7 @@ var _ = Describe("Update URL Handler", func() {
 			mockUrlReadSvc.
 				EXPECT().
 				GetById(urlID.String()).
-				Return(mockUrl, nil)
+				Return(*mockUrl, nil)
 
 			expiresOnField := time.Now().Add(-10)
 			requestBody := updateShortUrlDto{
@@ -207,24 +199,16 @@ var _ = Describe("Update URL Handler", func() {
 		expiresOn := time.Now().Add(time.Hour * 1)
 		shortCode, _ := encoding.GetUniqueShortCode()
 
-		mockUrl := entities.URL{
-			UserId:      identifier.New().FromString(userId),
-			OriginalUrl: originalUrl,
-			CustomAlias: customAlias,
-			ExpiresOn:   expiresOn,
-			BaseEntity: entities.BaseEntity{
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			},
-			Hits:      0,
-			Keywords:  []entities.Keyword{},
-			ShortCode: shortCode,
-		}
+		mockUrl, err := entities.NewUrl(identifier.New().FromString(userId), originalUrl, customAlias, expiresOn, []string{})
+		assert.NoError(GinkgoT(), err)
+
+		err = mockUrl.SetShortCode(shortCode)
+		assert.NoError(GinkgoT(), err)
 
 		mockUrlReadSvc.
 			EXPECT().
 			GetById(urlID.String()).
-			Return(mockUrl, nil)
+			Return(*mockUrl, nil)
 
 		expiresOnField := time.Now().Add(time.Hour + 10)
 
@@ -250,7 +234,7 @@ var _ = Describe("Update URL Handler", func() {
 		urlRouter.updateUrl(ctx)
 
 		var actualResponse map[string]any
-		err := json.Unmarshal([]byte(responseRecorder.Body.Bytes()), &actualResponse)
+		err = json.Unmarshal([]byte(responseRecorder.Body.Bytes()), &actualResponse)
 		assert.NoError(GinkgoT(), err)
 
 		assert.Equal(GinkgoT(), http.StatusBadRequest, responseRecorder.Code)
@@ -273,24 +257,16 @@ var _ = Describe("Update URL Handler", func() {
 		expiresOn := time.Now().Add(time.Hour * 1)
 		shortCode, _ := encoding.GetUniqueShortCode()
 
-		mockUrl := entities.URL{
-			UserId:      identifier.New().FromString(userId),
-			OriginalUrl: originalUrl,
-			CustomAlias: customAlias,
-			ExpiresOn:   expiresOn,
-			BaseEntity: entities.BaseEntity{
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			},
-			Hits:      0,
-			Keywords:  []entities.Keyword{},
-			ShortCode: shortCode,
-		}
+		mockUrl, err := entities.NewUrl(identifier.New().FromString(userId), originalUrl, customAlias, expiresOn, []string{})
+		assert.NoError(GinkgoT(), err)
+
+		err = mockUrl.SetShortCode(shortCode)
+		assert.NoError(GinkgoT(), err)
 
 		mockUrlReadSvc.
 			EXPECT().
 			GetById(urlID.String()).
-			Return(mockUrl, nil)
+			Return(*mockUrl, nil)
 
 		expiresOnField := time.Now().Add(time.Hour + 10)
 		requestBody := updateShortUrlDto{
@@ -299,24 +275,16 @@ var _ = Describe("Update URL Handler", func() {
 			Keywords:    []string{},
 		}
 
-		mockUpdatedUrl := entities.URL{
-			UserId:      identifier.New().FromString(userId),
-			OriginalUrl: originalUrl,
-			CustomAlias: requestBody.CustomAlias,
-			ExpiresOn:   *requestBody.ExpiresOn,
-			BaseEntity: entities.BaseEntity{
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			},
-			Hits:      0,
-			Keywords:  []entities.Keyword{},
-			ShortCode: shortCode,
-		}
+		mockUpdatedUrl, err := entities.NewUrl(identifier.New().FromString(userId), originalUrl, requestBody.CustomAlias, *requestBody.ExpiresOn, []string{})
+		assert.NoError(GinkgoT(), err)
+
+		err = mockUpdatedUrl.SetShortCode(shortCode)
+		assert.NoError(GinkgoT(), err)
 
 		mockUrlWriteSvc.
 			EXPECT().
 			UpdateUrl(gomock.Any()).
-			Return(mockUpdatedUrl, nil)
+			Return(*mockUpdatedUrl, nil)
 
 		responseRecorder := httptest.NewRecorder()
 		ctx, _ := gin.CreateTestContext(responseRecorder)
@@ -329,7 +297,7 @@ var _ = Describe("Update URL Handler", func() {
 		urlRouter.updateUrl(ctx)
 
 		var actualResponse map[string]any
-		err := json.Unmarshal([]byte(responseRecorder.Body.Bytes()), &actualResponse)
+		err = json.Unmarshal([]byte(responseRecorder.Body.Bytes()), &actualResponse)
 		assert.NoError(GinkgoT(), err)
 
 		assert.Equal(GinkgoT(), http.StatusAccepted, responseRecorder.Code)
@@ -337,14 +305,14 @@ var _ = Describe("Update URL Handler", func() {
 		expectedResponseBody := map[string]any{
 			"id":           mockUpdatedUrl.ID.String(),
 			"user_id":      mockUpdatedUrl.UserId.String(),
-			"original_url": mockUpdatedUrl.OriginalUrl,
-			"custom_alias": mockUpdatedUrl.CustomAlias,
-			"short_code":   mockUpdatedUrl.ShortCode,
+			"original_url": mockUpdatedUrl.GetOriginalURL(),
+			"custom_alias": mockUpdatedUrl.GetCustomAlias(),
+			"short_code":   mockUpdatedUrl.GetShortCode(),
 			"keywords":     requestBody.Keywords,
-			"expires_on":   mockUpdatedUrl.ExpiresOn.Format(time.RFC3339Nano),
+			"expires_on":   mockUpdatedUrl.GetExpiresOn().Format(time.RFC3339Nano),
 			"created_at":   mockUpdatedUrl.CreatedAt.Format(time.RFC3339Nano),
 			"updated_at":   mockUpdatedUrl.UpdatedAt.Format(time.RFC3339Nano),
-			"hits":         mockUpdatedUrl.Hits,
+			"hits":         mockUpdatedUrl.GetHits(),
 		}
 
 		if id, ok := actualResponse["id"]; ok {

@@ -117,7 +117,7 @@ var _ = Describe("Auth Handler", func() {
 
 				expectedRespBody := gin.H{
 					"id":         mockUser.ID.String(),
-					"email":      mockUser.Email.Value,
+					"email":      mockUser.Email.GetValue(),
 					"created_at": mockUser.CreatedAt.Format(time.RFC3339Nano),
 					"updated_at": mockUser.UpdatedAt.Format(time.RFC3339Nano),
 				}
@@ -342,7 +342,7 @@ var _ = Describe("Auth Handler", func() {
 
 						expectedRespBody := gin.H{
 							"id":            user.ID.String(),
-							"email":         user.Email.Value,
+							"email":         user.Email.GetValue(),
 							"created_at":    user.CreatedAt.Format(time.RFC3339Nano),
 							"updated_at":    user.UpdatedAt.Format(time.RFC3339Nano),
 							"access_token":  accessToken,

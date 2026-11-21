@@ -21,7 +21,7 @@ type User struct {
 	BaseEntity
 
 	// Email is the email address for a user
-	Email
+	*Email
 
 	// Password is the password for a user
 	Password

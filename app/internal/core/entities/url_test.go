@@ -7,6 +7,7 @@ import (
 	"bou.ke/monkey"
 	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
 	"github.com/sanctumlabs/curtz/app/pkg/identifier"
+	"github.com/stretchr/testify/assert"
 )
 
 type urlTestCase struct {
@@ -27,7 +28,7 @@ var urlTestCases = []urlTestCase{
 		alias:         "",
 		expiresOn:     time.Now().Add(time.Hour * 2),
 		keywords:      []string{},
-		expectedError: errdefs.ErrInvalidURLLen,
+		expectedError: errdefs.ErrURLLength,
 	},
 	{
 		name:          "original url with invalid localhost as host should return error",
@@ -36,7 +37,7 @@ var urlTestCases = []urlTestCase{
 		alias:         "",
 		expiresOn:     time.Now().Add(time.Hour * 2),
 		keywords:      []string{},
-		expectedError: errdefs.ErrFilteredURL,
+		expectedError: errdefs.ErrURLFiltered,
 	},
 	{
 		name:          "original url with invalid 127.0.0.1 as host should return error",
@@ -45,7 +46,7 @@ var urlTestCases = []urlTestCase{
 		alias:         "",
 		expiresOn:     time.Now().Add(time.Hour * 2),
 		keywords:      []string{},
-		expectedError: errdefs.ErrFilteredURL,
+		expectedError: errdefs.ErrURLFiltered,
 	},
 	{
 		name:          "original url with invalid scheme should return error",
@@ -54,7 +55,7 @@ var urlTestCases = []urlTestCase{
 		alias:         "",
 		expiresOn:     time.Now().Add(time.Hour * 2),
 		keywords:      []string{},
-		expectedError: errdefs.ErrInvalidURL,
+		expectedError: errdefs.ErrURLInvalid,
 	},
 	{
 		name:          "original url with filtered url should return error",
@@ -63,7 +64,7 @@ var urlTestCases = []urlTestCase{
 		alias:         "",
 		expiresOn:     time.Now().Add(time.Hour * 2),
 		keywords:      []string{},
-		expectedError: errdefs.ErrFilteredURL,
+		expectedError: errdefs.ErrURLFiltered,
 	},
 	{
 		name:          "should not return error with valid expires on date",
@@ -135,6 +136,84 @@ func TestGetExpiryDuration(t *testing.T) {
 			actualExpiry := url.GetExpiryDuration()
 			if tc.duration != actualExpiry {
 				t.Errorf("url.GetExpiryDuration() = %d expected = %d", actualExpiry, tc.duration)
+			}
+		})
+	}
+}
+
+type urlShortCodeTestCase struct {
+	urlTestCase
+	shortCode   string
+	expectedErr error
+}
+
+var urlShortCodeTestCases = []urlShortCodeTestCase{
+	{
+		urlTestCase: urlTestCase{
+			name:          "should return unique short code and set to new short code without error",
+			userId:        identifier.New(),
+			url:           "http://example.com",
+			alias:         "",
+			expiresOn:     time.Now().Add(time.Hour * 1),
+			keywords:      []string{},
+			expectedError: nil,
+		},
+		shortCode:   "abcdef",
+		expectedErr: nil,
+	},
+	{
+		urlTestCase: urlTestCase{
+			name:          "should return unique short code and return error when setting to a new invalid short code",
+			userId:        identifier.New(),
+			url:           "http://example.com",
+			alias:         "",
+			expiresOn:     time.Now().Add(time.Hour * 1),
+			keywords:      []string{},
+			expectedError: nil,
+		},
+		shortCode:   "abcdefghij",
+		expectedErr: errdefs.ErrURLInvalid,
+	},
+}
+
+func TestUrlShortCode(t *testing.T) {
+	for _, tc := range urlShortCodeTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			url, err := NewUrl(tc.userId, tc.url, tc.alias, tc.expiresOn, tc.keywords)
+			if err != tc.expectedError {
+				t.Errorf("NewUrl(%v, %s, %s, %s, %v) = (%v, %v) expected error: %v, got: %v", tc.userId, tc.url, tc.alias, tc.expiresOn, tc.keywords, url, err, tc.expectedError, err)
+			}
+
+			initialUniqueShortCode := url.GetShortCode()
+			assert.NotEmpty(t, initialUniqueShortCode)
+
+			actualErr := url.SetShortCode(tc.shortCode)
+
+			if tc.expectedErr != nil {
+				assert.Error(t, actualErr)
+			} else {
+				assert.NoError(t, actualErr)
+
+				newUniqueShortCode := url.GetShortCode()
+
+				if initialUniqueShortCode == newUniqueShortCode {
+					t.Errorf("url.GetShortCode() = %s expected = %s", newUniqueShortCode, tc.shortCode)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkUrlShortCode(b *testing.B) {
+	if testing.Short() {
+		b.Skip("skipping benchmark")
+	}
+
+	for _, tc := range urlShortCodeTestCases {
+		b.Run(tc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				url, _ := NewUrl(tc.userId, tc.url, tc.alias, tc.expiresOn, tc.keywords)
+				_ = url.SetShortCode(tc.shortCode)
 			}
 		})
 	}

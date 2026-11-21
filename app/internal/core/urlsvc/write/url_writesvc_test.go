@@ -172,7 +172,7 @@ var _ = Describe("UrlWriteSvc", func() {
 			assert.NoError(GinkgoT(), err)
 
 			originalUrl := "http://example.com"
-			shortCode := "feampimf"
+			shortCode := "feamp"
 			mockUrl := data.MockUrl(userId.String(), originalUrl, customAlias, shortCode, expiresOn, keywords)
 
 			mockUserSvc.
@@ -183,12 +183,12 @@ var _ = Describe("UrlWriteSvc", func() {
 			mockUrlWriteRepo.
 				EXPECT().
 				Update(urlId.String(), customAlias, gomock.Any(), &expiresOn).
-				Return(mockUrl, nil)
+				Return(*mockUrl, nil)
 
 			actual, actualErr := urlWriteSvc.UpdateUrl(request)
 			assert.NoError(GinkgoT(), actualErr)
 
-			assert.Equal(GinkgoT(), mockUrl, actual)
+			assert.Equal(GinkgoT(), *mockUrl, actual)
 		})
 	})
 })

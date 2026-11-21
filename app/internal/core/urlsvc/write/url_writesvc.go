@@ -60,7 +60,7 @@ func (svc *UrlWriteSvc) UpdateUrl(command contracts.UpdateUrlRequest) (entities.
 	if len(keywords) != 0 {
 		for i, keyword := range keywords {
 			if kw, err := entities.NewKeyword(keyword); err == nil {
-				kws[i] = kw
+				kws[i] = *kw
 			} else {
 				return entities.URL{}, err
 			}

@@ -36,7 +36,7 @@ func (svc UserSvc) CreateUser(email, password string) (entities.User, error) {
 		return entities.User{}, err
 	}
 
-	if err := svc.notificationSvc.SendEmailVerificationNotification(user.Email.Value, encodedToken); err != nil {
+	if err := svc.notificationSvc.SendEmailVerificationNotification(user.Email.GetValue(), encodedToken); err != nil {
 		return entities.User{}, err
 	}
 

@@ -76,8 +76,8 @@ func TestGetAllUrlsReturnsOkWhenSuccessGettingUrls(t *testing.T) {
 	mockUrlTwo := data.MockUrl(userID.String(), originalUrlTwo, customAliasTwo, shortCodeTwo, expiresOnTwo, []string{})
 
 	mockUrls := []entities.URL{
-		mockUrlOne,
-		mockUrlTwo,
+		*mockUrlOne,
+		*mockUrlTwo,
 	}
 
 	mockUrlReadSvc.
@@ -98,26 +98,26 @@ func TestGetAllUrlsReturnsOkWhenSuccessGettingUrls(t *testing.T) {
 		{
 			"id":           mockUrlOne.ID.String(),
 			"user_id":      mockUrlOne.UserId.String(),
-			"original_url": mockUrlOne.OriginalUrl,
-			"custom_alias": mockUrlOne.CustomAlias,
-			"short_code":   mockUrlOne.ShortCode,
+			"original_url": mockUrlOne.GetOriginalURL(),
+			"custom_alias": mockUrlOne.GetCustomAlias(),
+			"short_code":   mockUrlOne.GetShortCode(),
 			"keywords":     []any{},
-			"expires_on":   mockUrlOne.ExpiresOn.Format(time.RFC3339Nano),
+			"expires_on":   mockUrlOne.GetExpiresOn().Format(time.RFC3339Nano),
 			"created_at":   mockUrlOne.CreatedAt.Format(time.RFC3339Nano),
 			"updated_at":   mockUrlOne.UpdatedAt.Format(time.RFC3339Nano),
-			"hits":         mockUrlOne.Hits,
+			"hits":         mockUrlOne.GetHits(),
 		},
 		{
 			"id":           mockUrlTwo.ID.String(),
 			"user_id":      mockUrlTwo.UserId.String(),
-			"original_url": mockUrlTwo.OriginalUrl,
-			"custom_alias": mockUrlTwo.CustomAlias,
-			"short_code":   mockUrlTwo.ShortCode,
+			"original_url": mockUrlTwo.GetOriginalURL(),
+			"custom_alias": mockUrlTwo.GetCustomAlias(),
+			"short_code":   mockUrlTwo.GetShortCode(),
 			"keywords":     []any{},
-			"expires_on":   mockUrlTwo.ExpiresOn.Format(time.RFC3339Nano),
+			"expires_on":   mockUrlTwo.GetExpiresOn().Format(time.RFC3339Nano),
 			"created_at":   mockUrlTwo.CreatedAt.Format(time.RFC3339Nano),
 			"updated_at":   mockUrlTwo.UpdatedAt.Format(time.RFC3339Nano),
-			"hits":         mockUrlTwo.Hits,
+			"hits":         mockUrlTwo.GetHits(),
 		},
 	}
 
