@@ -1,3 +1,5 @@
+//go:build legacy
+
 package email
 
 type EmailService struct{}

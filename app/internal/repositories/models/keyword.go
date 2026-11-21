@@ -1,3 +1,5 @@
+//go:build legacy
+
 package models
 
 // Keyword is model for keywords attached to a url

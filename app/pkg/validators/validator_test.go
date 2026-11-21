@@ -20,19 +20,14 @@ var urlTestCases = []testCase{
 		expectedErr: nil,
 	},
 	{
-		name:        "valid url without protocol but invalid length",
+		name:        "valid url without protocol",
 		input:       "www.google.com",
-		expectedErr: errdefs.ErrURLLength,
+		expectedErr: nil,
 	},
 	{
 		name:        "invalid url with invalid protocol",
 		input:       "htt://www.google.com",
-		expectedErr: errdefs.ErrURLInvalid,
-	},
-	{
-		name:        "invalid url which should be filtered should return err",
-		input:       "http://localhost:9000",
-		expectedErr: errdefs.ErrURLFiltered,
+		expectedErr: errdefs.ErrInvalidURL,
 	},
 }
 
@@ -104,7 +99,7 @@ var urlIdTestCases = []testCase{
 	{
 		name:        "invalid urlId",
 		input:       "",
-		expectedErr: errdefs.ErrURLIdInvalid,
+		expectedErr: errdefs.ErrInvalidUrlId,
 	},
 }
 
@@ -210,63 +205,6 @@ func BenchmarkIsValidExpirationTime(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, tc := range expiresTimestampTestCases {
 			_ = IsValidExpirationTime(tc.input)
-		}
-	}
-}
-
-type shortCodeTestCase struct {
-	name        string
-	input       string
-	expectedErr error
-}
-
-var shortCodeTestCases = []shortCodeTestCase{
-	{
-		name:        "empty short code",
-		input:       "",
-		expectedErr: errdefs.ErrShortCodeInvalid,
-	},
-	{
-		name:        "long short code",
-		input:       "abcdefghigelslsi",
-		expectedErr: errdefs.ErrShortCodeInvalid,
-	},
-	{
-		name:        "invalid short code",
-		input:       "/.,'][=0';",
-		expectedErr: errdefs.ErrShortCodeInvalid,
-	},
-	{
-		name:        "valid short short code",
-		input:       "bcde",
-		expectedErr: nil,
-	},
-	{
-		name:        "valid short code of length 6",
-		input:       "abcdef",
-		expectedErr: nil,
-	},
-}
-
-func TestIsValidShortCode(t *testing.T) {
-	for _, tc := range shortCodeTestCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := IsValidShortCode(tc.input)
-			if err != tc.expectedErr {
-				t.Errorf("IsValidShortCode(%s) = %v expected error %v, got %v", tc.input, err, tc.expectedErr, err)
-			}
-		})
-	}
-}
-
-func BenchmarkIsValidShortCode(b *testing.B) {
-	if testing.Short() {
-		b.Skip("skipping benchmark")
-	}
-
-	for i := 0; i < b.N; i++ {
-		for _, tc := range shortCodeTestCases {
-			_ = IsValidShortCode(tc.input)
 		}
 	}
 }

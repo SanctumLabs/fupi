@@ -15,7 +15,7 @@ Simple URL Shortner Service
 
 Ensure you have the following setup on you local development environment:
 
-### [Go 1.18](https://go.dev/)
+### [Go 1.25](https://go.dev/)
 
 This is the programming language used to build the application. You will require this installed in order to install dependencies and run the application.
 

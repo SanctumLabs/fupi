@@ -1,6 +1,10 @@
+//go:build legacy
+
 package entities
 
 import (
+	"time"
+
 	"github.com/sanctumlabs/curtz/app/pkg/identifier"
 )
 
@@ -47,7 +51,14 @@ func NewUser(email, password string) (User, error) {
 
 	id := identifier.New()
 	userToken := NewToken()
-	baseModel := NewBaseEntity()
+	now := time.Now()
+	baseModel := NewBaseEntity(BaseEntityParams{
+		ID:        id,
+		Metadata:  nil,
+		CreatedAt: now,
+		UpdatedAt: now,
+		DeletedAt: nil,
+	})
 
 	return User{
 		ID:         id,

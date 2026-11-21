@@ -76,3 +76,4 @@ __debug_bin
 bin/curtz
 tmp/
 *.log
+.env.docker

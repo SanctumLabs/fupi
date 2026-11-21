@@ -1,0 +1,160 @@
+version: "2"
+sql:
+  # root queries can come here, uncomment this when there are root queries specified in the directory queries
+  # - engine: "postgresql"
+  #   queries: "internal/infra/database/postgresql/sql/queries/"
+  #   schema: "app/internal/adapters/postgres/sql/schema.sql"
+  #   gen:
+  #     go:
+  #       package: "postgresql"
+  #       out: "internal/infra/database/postgresql"
+  #       sql_package: "pgx/v5"
+  #       emit_json_tags: true
+  #       emit_db_tags: true
+
+  # Outbox related queries
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/outbox/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # Kafka related queries
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/kafka/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # Audit Trail
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/audittrail/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # User Status
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/users/status/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # API keys
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/users/apikeys/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # User Queries
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/users/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # Url Status
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/url/status/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # Url
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/url/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # Keywords
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/url/keywords/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # Url Scans
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/url/scans/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+  # Webhook
+  - engine: "postgresql"
+    queries: "app/internal/adapters/postgres/sql/queries/webhooks/"
+    schema: "app/internal/adapters/postgres/sql/schema.sql"
+    gen:
+      go:
+        package: "postgresql"
+        out: "app/internal/adapters/postgres/sql"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_sql_as_comment: true
+
+plugins: []
+rules: []
+options: {}

@@ -1,3 +1,5 @@
+//go:build legacy
+
 package entities
 
 import "github.com/sanctumlabs/curtz/app/pkg/utils"

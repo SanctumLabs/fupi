@@ -1,10 +1,11 @@
+//go:build legacy
+
 package repositories
 
 import (
 	"context"
 
 	"github.com/sanctumlabs/curtz/app/config"
-	urlRepo "github.com/sanctumlabs/curtz/app/internal/repositories/urlrepo"
 	"github.com/sanctumlabs/curtz/app/internal/repositories/userepo"
 	"github.com/sanctumlabs/curtz/app/tools/logger"
 	"github.com/sanctumlabs/curtz/app/tools/monitoring"
@@ -17,11 +18,8 @@ var log = logger.NewLogger("repository")
 
 // Repository represents a database repository
 type Repository struct {
-	dbClient     *mongo.Client
-	userRepo     *userepo.UserRepo
-	urlRepo      *urlRepo.UrlRepo
-	urlReadRepo  *urlRepo.UrlReadRepo
-	urlWriteRepo *urlRepo.UrlWriteRepo
+	dbClient *mongo.Client
+	userRepo *userepo.UserRepo
 }
 
 // NewRepository creates a new repository with provided config
@@ -60,11 +58,8 @@ func NewRepository(config config.DatabaseConfig) *Repository {
 	log.Info("DB Connection successful")
 
 	return &Repository{
-		dbClient:     dbClient,
-		userRepo:     userepo.NewUserRepo(db.Collection("users"), ctx),
-		urlRepo:      urlRepo.NewUrlRepo(db.Collection("urls"), ctx),
-		urlReadRepo:  urlRepo.NewUrlReadRepo(db.Collection("urls"), ctx),
-		urlWriteRepo: urlRepo.NewUrlWriteRepo(db.Collection("urls"), ctx),
+		dbClient: dbClient,
+		userRepo: userepo.NewUserRepo(db.Collection("users"), ctx),
 	}
 }
 
@@ -72,21 +67,6 @@ func NewRepository(config config.DatabaseConfig) *Repository {
 func (r *Repository) Disconnect(ctx context.Context) error {
 	defer monitoring.ErrorHandler()
 	return r.dbClient.Disconnect(ctx)
-}
-
-// GetUrlRepo returns the Url repository
-func (r *Repository) GetUrlRepo() *urlRepo.UrlRepo {
-	return r.urlRepo
-}
-
-// GetUrlReadRepo returns the Url repository
-func (r *Repository) GetUrlReadRepo() *urlRepo.UrlReadRepo {
-	return r.urlReadRepo
-}
-
-// GetUrlWriteRepo returns the Url repository
-func (r *Repository) GetUrlWriteRepo() *urlRepo.UrlWriteRepo {
-	return r.urlWriteRepo
 }
 
 // GetUserRepo returns configured user repository
