@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // OutboxWriteQuerier is the SQL operation needed to append domain events to the transactional outbox.
@@ -17,12 +18,24 @@ type OutboxWriteQuerier interface {
 	QueryCreateOutboxEvent(ctx context.Context, params postgresql.QueryCreateOutboxEventParams) (postgresql.OutboxEvent, error)
 }
 
-// outboxHeaders are the message headers a relay forwards alongside the payload.
+// outboxHeaders are the message headers a relay forwards alongside the payload. TraceParent and TraceState are the W3C
+// trace context of the request that wrote the event, so the relay can continue its trace; they are absent when the
+// writer had no span.
 type outboxHeaders struct {
 	EventID     string    `json:"event_id"`
 	EventType   string    `json:"event_type"`
 	AggregateID string    `json:"aggregate_id"`
 	OccurredAt  time.Time `json:"occurred_at"`
+	TraceParent string    `json:"traceparent,omitempty"`
+	TraceState  string    `json:"tracestate,omitempty"`
+}
+
+// traceHeaders returns the traceparent and tracestate of the span in ctx. It uses the W3C trace-context propagator
+// directly rather than the global one, so baggage, which can carry user data, is never stored with an event.
+func traceHeaders(ctx context.Context) (traceParent, traceState string) {
+	carrier := propagation.MapCarrier{}
+	propagation.TraceContext{}.Inject(ctx, carrier)
+	return carrier.Get("traceparent"), carrier.Get("tracestate")
 }
 
 // WriteOutboxEvents appends events to the outbox using q, which must be bound to the same
@@ -30,6 +43,7 @@ type outboxHeaders struct {
 // event ID, so consumers can de-duplicate on it, and the aggregate ID is the partition key so one
 // aggregate's events stay in order.
 func WriteOutboxEvents(ctx context.Context, q OutboxWriteQuerier, destination, aggregateID string, events []entity.DomainEvent) error {
+	traceParent, traceState := traceHeaders(ctx)
 	for _, event := range events {
 		eventID, idErr := postgres.StringToUUID(event.ID())
 		if idErr != nil {
@@ -46,6 +60,8 @@ func WriteOutboxEvents(ctx context.Context, q OutboxWriteQuerier, destination, a
 			EventType:   event.EventType(),
 			AggregateID: aggregateID,
 			OccurredAt:  event.OccurredAt(),
+			TraceParent: traceParent,
+			TraceState:  traceState,
 		})
 		if headersErr != nil {
 			return fmt.Errorf("failed to encode %s event headers: %w", event.EventType(), headersErr)

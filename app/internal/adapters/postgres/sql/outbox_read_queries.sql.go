@@ -13,7 +13,7 @@ import (
 
 const queryAllOutboxEvents = `-- name: QueryAllOutboxEvents :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($1::bool OR oe.deleted_at IS NULL)
 AND (
@@ -60,7 +60,7 @@ type QueryAllOutboxEventsRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($1::bool OR oe.deleted_at IS NULL)
 //	AND (
@@ -118,6 +118,8 @@ func (q *Queries) QueryAllOutboxEvents(ctx context.Context, arg QueryAllOutboxEv
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -154,7 +156,7 @@ func (q *Queries) QueryAllOutboxEventsCount(ctx context.Context, includeDeleted 
 
 const queryOutboxEventByCorrelationId = `-- name: QueryOutboxEventByCorrelationId :one
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE oe.correlation_id = $1
 `
@@ -166,7 +168,7 @@ type QueryOutboxEventByCorrelationIdRow struct {
 // QueryOutboxEventByCorrelationId
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE oe.correlation_id = $1
 func (q *Queries) QueryOutboxEventByCorrelationId(ctx context.Context, correlationID pgtype.Text) (QueryOutboxEventByCorrelationIdRow, error) {
@@ -185,6 +187,8 @@ func (q *Queries) QueryOutboxEventByCorrelationId(ctx context.Context, correlati
 		&i.OutboxEvent.Metadata,
 		&i.OutboxEvent.SentTime,
 		&i.OutboxEvent.ProcessingAt,
+		&i.OutboxEvent.Attempts,
+		&i.OutboxEvent.ParkedAt,
 		&i.OutboxEvent.CreatedAt,
 		&i.OutboxEvent.UpdatedAt,
 		&i.OutboxEvent.DeletedAt,
@@ -194,7 +198,7 @@ func (q *Queries) QueryOutboxEventByCorrelationId(ctx context.Context, correlati
 
 const queryOutboxEventById = `-- name: QueryOutboxEventById :one
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE oe.id = $1
 `
@@ -206,7 +210,7 @@ type QueryOutboxEventByIdRow struct {
 // QueryOutboxEventById
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE oe.id = $1
 func (q *Queries) QueryOutboxEventById(ctx context.Context, id pgtype.UUID) (QueryOutboxEventByIdRow, error) {
@@ -225,6 +229,8 @@ func (q *Queries) QueryOutboxEventById(ctx context.Context, id pgtype.UUID) (Que
 		&i.OutboxEvent.Metadata,
 		&i.OutboxEvent.SentTime,
 		&i.OutboxEvent.ProcessingAt,
+		&i.OutboxEvent.Attempts,
+		&i.OutboxEvent.ParkedAt,
 		&i.OutboxEvent.CreatedAt,
 		&i.OutboxEvent.UpdatedAt,
 		&i.OutboxEvent.DeletedAt,
@@ -234,7 +240,7 @@ func (q *Queries) QueryOutboxEventById(ctx context.Context, id pgtype.UUID) (Que
 
 const queryOutboxEventsByDestination = `-- name: QueryOutboxEventsByDestination :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($2::bool OR oe.deleted_at IS NULL)
 AND oe.destination = $1
@@ -283,7 +289,7 @@ type QueryOutboxEventsByDestinationRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($2::bool OR oe.deleted_at IS NULL)
 //	AND oe.destination = $1
@@ -343,6 +349,8 @@ func (q *Queries) QueryOutboxEventsByDestination(ctx context.Context, arg QueryO
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -359,7 +367,7 @@ func (q *Queries) QueryOutboxEventsByDestination(ctx context.Context, arg QueryO
 
 const queryOutboxEventsByEventType = `-- name: QueryOutboxEventsByEventType :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($2::bool OR oe.deleted_at IS NULL)
 AND oe.event_type = $1
@@ -408,7 +416,7 @@ type QueryOutboxEventsByEventTypeRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($2::bool OR oe.deleted_at IS NULL)
 //	AND oe.event_type = $1
@@ -468,6 +476,8 @@ func (q *Queries) QueryOutboxEventsByEventType(ctx context.Context, arg QueryOut
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -484,7 +494,7 @@ func (q *Queries) QueryOutboxEventsByEventType(ctx context.Context, arg QueryOut
 
 const queryOutboxEventsByGroupId = `-- name: QueryOutboxEventsByGroupId :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($1::bool OR oe.deleted_at IS NULL)
 AND oe.group_id = $2
@@ -533,7 +543,7 @@ type QueryOutboxEventsByGroupIdRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($1::bool OR oe.deleted_at IS NULL)
 //	AND oe.group_id = $2
@@ -593,6 +603,8 @@ func (q *Queries) QueryOutboxEventsByGroupId(ctx context.Context, arg QueryOutbo
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -609,7 +621,7 @@ func (q *Queries) QueryOutboxEventsByGroupId(ctx context.Context, arg QueryOutbo
 
 const queryOutboxEventsSent = `-- name: QueryOutboxEventsSent :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($1::bool OR oe.deleted_at IS NULL)
 AND oe.sent_time IS NOT NULL
@@ -657,7 +669,7 @@ type QueryOutboxEventsSentRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($1::bool OR oe.deleted_at IS NULL)
 //	AND oe.sent_time IS NOT NULL
@@ -716,6 +728,8 @@ func (q *Queries) QueryOutboxEventsSent(ctx context.Context, arg QueryOutboxEven
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -732,7 +746,7 @@ func (q *Queries) QueryOutboxEventsSent(ctx context.Context, arg QueryOutboxEven
 
 const queryOutboxEventsSentForUpdate = `-- name: QueryOutboxEventsSentForUpdate :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($1::bool OR oe.deleted_at IS NULL)
 AND oe.sent_time IS NOT NULL
@@ -780,7 +794,7 @@ type QueryOutboxEventsSentForUpdateRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($1::bool OR oe.deleted_at IS NULL)
 //	AND oe.sent_time IS NOT NULL
@@ -839,6 +853,8 @@ func (q *Queries) QueryOutboxEventsSentForUpdate(ctx context.Context, arg QueryO
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -855,7 +871,7 @@ func (q *Queries) QueryOutboxEventsSentForUpdate(ctx context.Context, arg QueryO
 
 const queryOutboxEventsUnSent = `-- name: QueryOutboxEventsUnSent :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($1::bool OR oe.deleted_at IS NULL)
 AND oe.sent_time IS NULL
@@ -912,7 +928,7 @@ type QueryOutboxEventsUnSentRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($1::bool OR oe.deleted_at IS NULL)
 //	AND oe.sent_time IS NULL
@@ -972,6 +988,8 @@ func (q *Queries) QueryOutboxEventsUnSent(ctx context.Context, arg QueryOutboxEv
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -988,7 +1006,7 @@ func (q *Queries) QueryOutboxEventsUnSent(ctx context.Context, arg QueryOutboxEv
 
 const queryOutboxEventsUnSentByDestination = `-- name: QueryOutboxEventsUnSentByDestination :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($1::bool OR oe.deleted_at IS NULL)
 AND $2 = oe.destination
@@ -1038,7 +1056,7 @@ type QueryOutboxEventsUnSentByDestinationRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($1::bool OR oe.deleted_at IS NULL)
 //	AND $2 = oe.destination
@@ -1099,6 +1117,8 @@ func (q *Queries) QueryOutboxEventsUnSentByDestination(ctx context.Context, arg 
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,
@@ -1115,7 +1135,7 @@ func (q *Queries) QueryOutboxEventsUnSentByDestination(ctx context.Context, arg 
 
 const queryOutboxEventsUnSentByDestinationWithLock = `-- name: QueryOutboxEventsUnSentByDestinationWithLock :many
 SELECT
-  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 FROM outbox_events oe
 WHERE ($1::bool OR oe.deleted_at IS NULL)
 AND $2 = oe.destination
@@ -1175,7 +1195,7 @@ type QueryOutboxEventsUnSentByDestinationWithLockRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.created_at, oe.updated_at, oe.deleted_at
+//	  oe.id, oe.group_id, oe.correlation_id, oe.partition_key, oe.destination, oe.event_type, oe.headers, oe.payload, oe.error_message, oe.metadata, oe.sent_time, oe.processing_at, oe.attempts, oe.parked_at, oe.created_at, oe.updated_at, oe.deleted_at
 //	FROM outbox_events oe
 //	WHERE ($1::bool OR oe.deleted_at IS NULL)
 //	AND $2 = oe.destination
@@ -1238,6 +1258,8 @@ func (q *Queries) QueryOutboxEventsUnSentByDestinationWithLock(ctx context.Conte
 			&i.OutboxEvent.Metadata,
 			&i.OutboxEvent.SentTime,
 			&i.OutboxEvent.ProcessingAt,
+			&i.OutboxEvent.Attempts,
+			&i.OutboxEvent.ParkedAt,
 			&i.OutboxEvent.CreatedAt,
 			&i.OutboxEvent.UpdatedAt,
 			&i.OutboxEvent.DeletedAt,

@@ -1,0 +1,36 @@
+type: http_request
+model: http_request
+id: rq_eYqAkDFb9P
+createdAt: 2026-10-08T16:06:38.559770
+updatedAt: 2026-10-08T16:20:56.639844
+workspaceId: wk_J5K7834vTe
+folderId: fl_AWSqb83Suw
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: ''
+headers: []
+method: GET
+name: App Ready
+sortPriority: 333.3333333333333
+url: ${[ API_BASE_URL ]}/health/ready
+urlParameters: []
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingHttpVersion:
+  enabled: false
+  value: auto

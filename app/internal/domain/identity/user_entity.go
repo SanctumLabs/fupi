@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 type (
@@ -24,6 +24,9 @@ type (
 
 		// status is the status of the user
 		status UserStatus
+
+		// role is the role of the user
+		role UserRole
 
 		// verification contains the user verification details
 		verification UserVerification
@@ -50,6 +53,9 @@ type (
 
 		// Status is the stats of the user
 		Status UserStatus
+
+		// Role is the role of the user; empty means a plain user
+		Role UserRole
 
 		// VerificationToken is the user's verification token
 		VerificationToken string
@@ -108,6 +114,11 @@ func NewUser(params UserParams) (*User, error) {
 		}
 	}
 
+	role := params.Role
+	if role == "" {
+		role = UserRoleUser
+	}
+
 	return &User{
 		AggregateRoot: aggregateRoot,
 		username:      params.Username,
@@ -115,6 +126,7 @@ func NewUser(params UserParams) (*User, error) {
 		email:         email,
 		verification:  verification,
 		status:        params.Status,
+		role:          role,
 		passwordHash:  params.PasswordHash,
 	}, nil
 }
@@ -154,6 +166,15 @@ func (user User) WithEmail(email Email) User {
 
 func (user *User) Status() UserStatus {
 	return user.status
+}
+
+func (user *User) Role() UserRole {
+	return user.role
+}
+
+// IsAdmin reports whether the user is an admin.
+func (user *User) IsAdmin() bool {
+	return user.role == UserRoleAdmin
 }
 
 func (user *User) Verification() UserVerification {
@@ -278,7 +299,7 @@ func (user *User) transition(to UserStatus, from ...UserStatus) error {
 }
 
 func (user *User) touch() {
-	user.EntityTimestamp = user.EntityTimestamp.WithUpdatedAt(time.Now())
+	user.EntityTimestamp = user.WithUpdatedAt(time.Now())
 }
 
 // Prefix returns the url prefix for logging

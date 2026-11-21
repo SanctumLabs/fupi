@@ -1,0 +1,8 @@
+# Allowlist: nothing enters the build context unless it is listed below (spec D1, section 4).
+*
+!go.mod
+!go.sum
+!app
+# Tests and their helpers never ship.
+**/*_test.go
+app/test

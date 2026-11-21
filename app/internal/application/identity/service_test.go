@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	mockidentity "github.com/sanctumlabs/curtz/app/internal/domain/identity/mocks"
-	mockports "github.com/sanctumlabs/curtz/app/internal/ports/mocks"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/utils"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	mockidentity "github.com/sanctumlabs/fupi/app/internal/domain/identity/mocks"
+	mockports "github.com/sanctumlabs/fupi/app/internal/ports/mocks"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -48,7 +48,7 @@ func validCommand() RegisterCommand {
 		Username:  "johndoe",
 		FirstName: "John",
 		LastName:  "Doe",
-		Email:     "john.doe@curtz.com",
+		Email:     "john.doe@fupi.com",
 		Password:  "s3cret-password",
 	}
 }
@@ -62,7 +62,7 @@ func (suite *IdentityServiceTestSuite) registeredUser(password string) *identity
 		Username:     "johndoe",
 		FirstName:    "John",
 		LastName:     "Doe",
-		Email:        "john.doe@curtz.com",
+		Email:        "john.doe@fupi.com",
 		PasswordHash: hash,
 	})
 	suite.Require().NoError(err)
@@ -191,7 +191,7 @@ func (suite *IdentityServiceTestSuite) TestVerifyEmail_ActivatesUser() {
 		Username:            user.Username(),
 		FirstName:           user.FirstName(),
 		LastName:            user.LastName(),
-		Email:               "john.doe@curtz.com",
+		Email:               "john.doe@fupi.com",
 		Status:              identity.UserStatusActive,
 		VerificationToken:   token,
 		VerificationExpires: verification.Expires(),
@@ -245,7 +245,7 @@ func (suite *IdentityServiceTestSuite) TestVerifyEmail_RejectsExpiredToken() {
 	user, err := identity.NewUser(identity.UserParams{
 		Username:            "johndoe",
 		FirstName:           "John",
-		Email:               "john.doe@curtz.com",
+		Email:               "john.doe@fupi.com",
 		Status:              identity.UserStatusInactive,
 		VerificationToken:   "expired-token",
 		VerificationExpires: time.Now().Add(-time.Hour),
@@ -265,7 +265,7 @@ func (suite *IdentityServiceTestSuite) TestVerifyEmail_RejectsAlreadyVerifiedUse
 	user, err := identity.NewUser(identity.UserParams{
 		Username:            "johndoe",
 		FirstName:           "John",
-		Email:               "john.doe@curtz.com",
+		Email:               "john.doe@fupi.com",
 		Status:              identity.UserStatusActive,
 		VerificationToken:   "used-token",
 		VerificationExpires: time.Now().Add(time.Hour),
@@ -288,11 +288,11 @@ func (suite *IdentityServiceTestSuite) TestLogin_IssuesTokenPair() {
 	user := suite.registeredUser(password)
 	userID := entity.IDToString(user.ID())
 
-	suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), "john.doe@curtz.com").Return(*user, nil).Times(1)
+	suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), "john.doe@fupi.com").Return(*user, nil).Times(1)
 	suite.mockTokens.EXPECT().GenerateAccessToken(userID).Return("access-token", nil).Times(1)
 	suite.mockTokens.EXPECT().GenerateRefreshToken(userID).Return("refresh-token", nil).Times(1)
 
-	actual, tokens, err := suite.service.Login(context.Background(), "john.doe@curtz.com", password)
+	actual, tokens, err := suite.service.Login(context.Background(), "john.doe@fupi.com", password)
 	suite.Require().NoError(err)
 	suite.Equal(user.ID(), actual.ID())
 	suite.Equal("access-token", tokens.AccessToken)
@@ -309,7 +309,7 @@ func (suite *IdentityServiceTestSuite) TestLogin_AllowsUnverifiedUser() {
 	suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Return("access-token", nil).Times(1)
 	suite.mockTokens.EXPECT().GenerateRefreshToken(gomock.Any()).Return("refresh-token", nil).Times(1)
 
-	_, _, err := suite.service.Login(context.Background(), "john.doe@curtz.com", password)
+	_, _, err := suite.service.Login(context.Background(), "john.doe@fupi.com", password)
 	suite.NoError(err)
 }
 
@@ -319,7 +319,7 @@ func (suite *IdentityServiceTestSuite) TestLogin_RejectsWrongPassword() {
 	suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), gomock.Any()).Return(*user, nil).Times(1)
 	suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Times(0)
 
-	_, _, err := suite.service.Login(context.Background(), "john.doe@curtz.com", "the-wrong-password")
+	_, _, err := suite.service.Login(context.Background(), "john.doe@fupi.com", "the-wrong-password")
 	suite.Require().Error(err)
 	suite.True(errdefs.IsUnauthorized(err), "expected Unauthorized, got %v", err)
 	suite.ErrorIs(err, errdefs.ErrInvalidCredentials)
@@ -333,7 +333,7 @@ func (suite *IdentityServiceTestSuite) TestLogin_UnknownEmailIsIndistinguishable
 		Times(1)
 	suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Times(0)
 
-	_, _, err := suite.service.Login(context.Background(), "nobody@curtz.com", "any-password")
+	_, _, err := suite.service.Login(context.Background(), "nobody@fupi.com", "any-password")
 	suite.Require().Error(err)
 	suite.True(errdefs.IsUnauthorized(err), "expected Unauthorized, got %v", err)
 	suite.ErrorIs(err, errdefs.ErrInvalidCredentials)
@@ -346,7 +346,7 @@ func (suite *IdentityServiceTestSuite) TestLogin_PropagatesDatastoreFailure() {
 	suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), gomock.Any()).Return(identity.User{}, datastoreErr).Times(1)
 	suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Times(0)
 
-	_, _, err := suite.service.Login(context.Background(), "john.doe@curtz.com", "any-password")
+	_, _, err := suite.service.Login(context.Background(), "john.doe@fupi.com", "any-password")
 	suite.Require().ErrorIs(err, datastoreErr)
 	suite.False(errdefs.IsUnauthorized(err), "an outage must not look like bad credentials")
 }
@@ -362,7 +362,7 @@ func (suite *IdentityServiceTestSuite) TestLogin_RejectsSuspendedAndDeletedAccou
 			user, err := identity.NewUser(identity.UserParams{
 				Username:     "johndoe",
 				FirstName:    "John",
-				Email:        "john.doe@curtz.com",
+				Email:        "john.doe@fupi.com",
 				PasswordHash: hash,
 				Status:       status,
 			})
@@ -371,7 +371,7 @@ func (suite *IdentityServiceTestSuite) TestLogin_RejectsSuspendedAndDeletedAccou
 			suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), gomock.Any()).Return(*user, nil).Times(1)
 			suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Times(0)
 
-			_, _, loginErr := suite.service.Login(context.Background(), "john.doe@curtz.com", password)
+			_, _, loginErr := suite.service.Login(context.Background(), "john.doe@fupi.com", password)
 			suite.Require().Error(loginErr)
 			suite.True(errdefs.IsForbidden(loginErr), "expected Forbidden, got %v", loginErr)
 		})
@@ -439,7 +439,7 @@ func (suite *IdentityServiceTestSuite) TestRefresh_RejectsSuspendedAndDeletedAcc
 			user, err := identity.NewUser(identity.UserParams{
 				Username:  "johndoe",
 				FirstName: "John",
-				Email:     "john.doe@curtz.com",
+				Email:     "john.doe@fupi.com",
 				Status:    status,
 			})
 			suite.Require().NoError(err)

@@ -4,7 +4,7 @@ package repository
 import (
 	"context"
 
-	"github.com/sanctumlabs/curtz/app/internal/pkg/common"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
 )
 
 type (

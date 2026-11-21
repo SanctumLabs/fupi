@@ -1,0 +1,226 @@
+# Run with: promtool test rules tests/stack_test.yml (see Task 8, Step 5). Paths are relative to this file.
+rule_files:
+  - ../rules/stack.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: Patroni has members but no leader
+    interval: 1m
+    input_series:
+      - {series: 'patroni_primary{instance="patroni-1"}', values: "0 0 0 0 0"}
+      - {series: 'patroni_primary{instance="patroni-2"}', values: "0 0 0 0 0"}
+      - {series: 'patroni_postgres_running{instance="patroni-1"}', values: "1 1 1 1 1"}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PatroniNoLeader
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: Patroni has members but no leader}
+
+  - name: A Patroni leader exists, so no alert
+    interval: 1m
+    input_series:
+      - {series: 'patroni_primary{instance="patroni-1"}', values: "1 1 1 1 1"}
+      - {series: 'patroni_primary{instance="patroni-2"}', values: "0 0 0 0 0"}
+      - {series: 'patroni_postgres_running{instance="patroni-1"}', values: "1 1 1 1 1"}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PatroniNoLeader
+        exp_alerts: []
+
+  - name: Single mode has no Patroni series at all, so no alert
+    interval: 1m
+    input_series:
+      - {series: 'up{job="prometheus"}', values: "1 1 1 1 1"}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PatroniNoLeader
+        exp_alerts: []
+
+  - name: Redis cluster state not ok
+    interval: 1m
+    input_series:
+      - {series: 'redis_cluster_state{instance="redis-exporter"}', values: "0 0 0 0 0"}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: RedisClusterNotOk
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: redis-exporter}
+            exp_annotations: {summary: Redis cluster state is not ok}
+
+  - name: Kafka under-replicated partitions
+    interval: 1m
+    input_series:
+      - {series: 'kafka_topic_partition_under_replicated_partition{topic="url.events",partition="0"}', values: "1 1 1 1 1 1"}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KafkaUnderReplicatedPartitions
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: Kafka has under-replicated partitions}
+
+  - name: Elasticsearch cluster red
+    interval: 1m
+    input_series:
+      - {series: 'elasticsearch_cluster_health_status{cluster="fupi-logs",color="red"}', values: "1 1 1 1 1"}
+      - {series: 'elasticsearch_cluster_health_status{cluster="fupi-logs",color="green"}', values: "0 0 0 0 0"}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ElasticsearchClusterRed
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: fupi-logs, color: red}
+            exp_annotations: {summary: Elasticsearch cluster status is red}
+
+  - name: The oldest outbox event has been waiting for more than five minutes
+    interval: 1m
+    input_series:
+      - {series: 'outbox_relay_oldest_unsent_age_seconds{service_name="fupi-worker"}', values: "301 400 500 600 700"}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: OutboxBacklogOld
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: The oldest outbox event has been waiting for delivery for more than 5 minutes}
+
+  - name: A backlog that is only a minute old is not an alert
+    interval: 1m
+    input_series:
+      - {series: 'outbox_relay_oldest_unsent_age_seconds{service_name="fupi-worker"}', values: "60 60 60 60 60"}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: OutboxBacklogOld
+        exp_alerts: []
+
+  - name: No worker series at all, so neither outbox alert
+    interval: 1m
+    input_series:
+      - {series: 'up{job="prometheus"}', values: "1 1 1 1 1 1 1"}
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OutboxBacklogOld
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: OutboxEventsParked
+        exp_alerts: []
+
+  - name: Parked outbox events
+    interval: 1m
+    input_series:
+      - {series: 'outbox_relay_parked_rows{service_name="fupi-worker"}', values: "1 1 1 1 1 1 1"}
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OutboxEventsParked
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: The outbox relay gave up on events; fix the cause and re-queue them (docs/LocalInfrastructure.md)}
+
+  - name: Nothing parked, so no alert
+    interval: 1m
+    input_series:
+      - {series: 'outbox_relay_parked_rows{service_name="fupi-worker"}', values: "0 0 0 0 0 0 0"}
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OutboxEventsParked
+        exp_alerts: []
+
+  - name: Workers are up but none of them is the active relay
+    interval: 1m
+    input_series:
+      - {series: 'outbox_relay_leader{service_name="fupi-worker",host_name="worker-a"}', values: "0 0 0 0 0 0"}
+      - {series: 'outbox_relay_leader{service_name="fupi-worker",host_name="worker-b"}', values: "0 0 0 0 0 0"}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OutboxNoActiveRelay
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "Workers are running but none is the active outbox relay, so nothing is delivered"}
+
+  - name: One active relay and a standby, so no alert
+    interval: 1m
+    input_series:
+      - {series: 'outbox_relay_leader{service_name="fupi-worker",host_name="worker-a"}', values: "1 1 1 1 1 1"}
+      - {series: 'outbox_relay_leader{service_name="fupi-worker",host_name="worker-b"}', values: "0 0 0 0 0 0"}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OutboxNoActiveRelay
+        exp_alerts: []
+
+  - name: No worker series at all, so no active-relay alert either
+    interval: 1m
+    input_series:
+      - {series: 'up{job="prometheus"}', values: "1 1 1 1 1 1"}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OutboxNoActiveRelay
+        exp_alerts: []
+
+  - name: URLs past their expiry stay unexpired for a quarter of an hour
+    interval: 1m
+    input_series:
+      - {series: 'url_expiry_backlog{service_name="fupi-worker"}', values: "3x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryBacklog
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "URLs past their expiry have stayed ACTIVE for 15 minutes; the expiry job is behind or cannot update them"}
+
+  - name: An empty expiry backlog does not alert
+    interval: 1m
+    input_series:
+      - {series: 'url_expiry_backlog{service_name="fupi-worker"}', values: "0x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryBacklog
+        exp_alerts: []
+
+  - name: The expiry job stopped reporting runs
+    interval: 1m
+    input_series:
+      - {series: 'url_expiry_last_run_seconds{service_name="fupi-worker"}', values: "0x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryStalled
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "The URL expiry job has not completed a run for more than 10 minutes"}
+
+  - name: No expiry series at all, so no expiry alert
+    interval: 1m
+    input_series:
+      - {series: 'up{job="prometheus"}', values: "1x20"}
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: UrlExpiryStalled
+        exp_alerts: []
+
+  - name: The rate limiter has been on its in-memory fallback for more than five minutes
+    interval: 1m
+    input_series:
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi",host_name="api-a"}', values: "1x10"}
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi",host_name="api-b"}', values: "0x10"}
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: RateLimiterOnFallback
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "The API has been rate limiting in memory for 5 minutes because Redis fails; limits are per instance"}
+
+  - name: A short rate limiter fallback does not alert
+    interval: 1m
+    input_series:
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi"}', values: "0 0 1 1 1 0 0 0 0 0"}
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: RateLimiterOnFallback
+        exp_alerts: []
+
+  - name: The rate limiter on Redis does not alert
+    interval: 1m
+    input_series:
+      - {series: 'http_ratelimit_fallback_active{service_name="fupi"}', values: "0x10"}
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: RateLimiterOnFallback
+        exp_alerts: []

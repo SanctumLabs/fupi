@@ -1,0 +1,34 @@
+{
+  "uid": "fupi-stack",
+  "title": "Stack overview",
+  "tags": [
+    "fupi"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {"id":1,"type":"stat","title":"Scrape targets up","gridPos":{"x":0,"y":0,"w":4,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"count(up == 1) or vector(0)","legendFormat":""}],"fieldConfig":{"defaults":{},"overrides":[]}},
+    {"id":2,"type":"stat","title":"Scrape targets down","gridPos":{"x":4,"y":0,"w":4,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"count(up == 0) or vector(0)","legendFormat":""}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"red","value":1}]}},"overrides":[]}},
+    {"id":3,"type":"stat","title":"Redis cluster state (1 = ok)","gridPos":{"x":8,"y":0,"w":4,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"min(redis_cluster_state)","legendFormat":""}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}},"overrides":[]}},
+    {"id":4,"type":"stat","title":"Patroni primaries","gridPos":{"x":12,"y":0,"w":4,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum(patroni_primary)","legendFormat":""}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}},"overrides":[]}},
+    {"id":5,"type":"stat","title":"Elasticsearch nodes","gridPos":{"x":16,"y":0,"w":4,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"max(elasticsearch_cluster_health_number_of_nodes)","legendFormat":""}],"fieldConfig":{"defaults":{},"overrides":[]}},
+    {"id":6,"type":"stat","title":"Kafka brokers","gridPos":{"x":20,"y":0,"w":4,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"max(kafka_brokers)","legendFormat":""}],"fieldConfig":{"defaults":{},"overrides":[]}},
+    {"id":7,"type":"timeseries","title":"Kafka under-replicated partitions","gridPos":{"x":0,"y":4,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum(kafka_topic_partition_under_replicated_partition)","legendFormat":"under-replicated"}],"fieldConfig":{"defaults":{},"overrides":[]}},
+    {"id":8,"type":"timeseries","title":"Kafka messages per second by topic","gridPos":{"x":12,"y":4,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum by (topic) (rate(kafka_topic_partition_current_offset[5m]))","legendFormat":"{{topic}}"}],"fieldConfig":{"defaults":{"unit":"ops"},"overrides":[]}},
+    {"id":9,"type":"timeseries","title":"Redis memory used","gridPos":{"x":0,"y":12,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum by (instance) (redis_memory_used_bytes)","legendFormat":"{{instance}}"}],"fieldConfig":{"defaults":{"unit":"bytes"},"overrides":[]}},
+    {"id":10,"type":"timeseries","title":"Postgres connections","gridPos":{"x":12,"y":12,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum by (datname) (pg_stat_database_numbackends)","legendFormat":"{{datname}}"}],"fieldConfig":{"defaults":{},"overrides":[]}},
+    {"id":11,"type":"timeseries","title":"Elasticsearch JVM heap used","gridPos":{"x":0,"y":20,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"max by (name) (elasticsearch_jvm_memory_used_bytes{area=\"heap\"})","legendFormat":"{{name}}"}],"fieldConfig":{"defaults":{"unit":"bytes"},"overrides":[]}}
+  ]
+}

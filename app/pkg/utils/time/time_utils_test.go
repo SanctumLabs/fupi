@@ -611,7 +611,7 @@ func BenchmarkParseHumanFriendlyDate(b *testing.B) {
 
 	for b.Loop() {
 		for _, testCase := range testCases {
-			ParseHumanFriendlyDate(testCase)
+			_, _ = ParseHumanFriendlyDate(testCase)
 		}
 	}
 }

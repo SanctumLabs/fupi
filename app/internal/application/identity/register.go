@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/utils"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/utils"
 )
 
 // RegisterCommand carries the inputs for registering a new user. Password is plaintext here and
@@ -24,7 +24,10 @@ type RegisterCommand struct {
 // Register creates a new user, persists them, and sends a verification email.
 //
 // The user is created INACTIVE and becomes ACTIVE only once VerifyEmail succeeds.
-func (svc *Service) Register(ctx context.Context, cmd RegisterCommand) (identity.User, error) {
+func (svc *Service) Register(ctx context.Context, cmd RegisterCommand) (_ identity.User, err error) {
+	ctx, span := svc.startUseCase(ctx, "Register")
+	defer func() { endUseCase(span, err) }()
+
 	handlerLogPrefix := fmt.Sprintf("%s<Register>", svc.logPrefix)
 
 	passwordHash, hashErr := utils.HashPassword(cmd.Password)

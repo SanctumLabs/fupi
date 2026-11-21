@@ -1,0 +1,59 @@
+type: http_request
+model: http_request
+id: rq_2KRMMGZTg3
+createdAt: 2026-10-08T17:33:11.519285
+updatedAt: 2026-10-08T17:38:20.918764
+workspaceId: wk_J5K7834vTe
+folderId: fl_3fGcTQpbdR
+authentication:
+  disabled: false
+  token: ${[ secure(value=b64'WUVOQ19lVUUwYXpOdVF3RzR3Nk5ZM0I2dWtBODYyZkxsMzhnMjNOaHVVNlRWNU5vWG5vakRlc3gxOHZzV0EydHIvMi9kblhEWnJxZTRMdk5ieTEwdmdQK0tOcTBRRkFqMTV1d1dXTWhUcnRDZ1cyQUEzL2JYdW9yN3RkMmRXdkRjMUxtaXZ6TnhyaGZDTi9NSG9QeUYwV08wVFVHUEJrQXhpSHBvRDJOLzVzcE81TGpSeXd4SW04YlhJMDBtdGoxc2JYS0JaSGRwbU1hWGsyclNUeWgwZllxbGtkZVczbktwcHNyeFRmSWdMdXJLbmpUZTc3U1A0Smhnay9mT2U1ZzZKalRXb2ZiUjREQzJYNWFQekQvbHRnZlVTNVFKNWFRY1ZQMFNMVTNmUjl1VHVjRnhKVWthbmdVVit0b1gwMGdSd0YwN2h3TmZPRGd5NThTTnRtOHhSOXB2MHZobEZ5TG1CV0w5eExyOFEzVUpIL1JhNGhqZEdNT3dpczNMSWcwYlA5UUMyb1NHVUR5dnA1RzNkcDQvYU9ZVCtWZFh2SjdVL1dyVmh3PT0') ]}
+authenticationType: bearer
+body:
+  text: |-
+    {
+      "original_url": "http://testing.fupi.com",
+      "custom_alias": "fupi",
+      "expires_on": "2026-11-08",
+      "keywords": [
+        "testing"
+      ]
+    }
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: pDFW3FHFHM
+method: POST
+name: Create Short URL
+sortPriority: 0.0
+url: ${[ API_BASE_URL_V1 ]}/urls
+urlParameters:
+- enabled: true
+  name: ''
+  value: ''
+  id: IDKJTdBKWr
+- enabled: true
+  name: ''
+  value: ''
+  id: RqP3MR2zAc
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingHttpVersion:
+  enabled: false
+  value: auto

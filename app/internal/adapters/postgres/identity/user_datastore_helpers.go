@@ -8,10 +8,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	postgresrepo "github.com/sanctumlabs/curtz/app/internal/adapters/postgres"
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
+	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 )
 
 // queryUserById is a helper function to query a user by ID

@@ -2,9 +2,9 @@ package urldatastore
 
 import (
 	"github.com/google/wire"
-	postgresrepo "github.com/sanctumlabs/curtz/app/internal/adapters/postgres"
-	"github.com/sanctumlabs/curtz/app/internal/domain/url"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
+	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
+	"github.com/sanctumlabs/fupi/app/internal/domain/url"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
 )
 
 type (
@@ -18,6 +18,8 @@ type (
 	urlReadDatastoreAdapter struct {
 		logPrefix string
 		dbClient  database.PostgresDatabaseClient
+		config    database.Config
+		withTx    postgresrepo.TxExecutor[postgresrepo.UrlReadQuerier]
 	}
 
 	urlDatastoreAdapter struct {
@@ -38,7 +40,7 @@ var (
 
 func NewUrlDatastoreAdapter(dbClient database.PostgresDatabaseClient, config database.Config) url.UrlDatastore {
 	return &urlDatastoreAdapter{
-		urlReadDatastoreAdapter:  *NewUrlReadDatastoreAdapter(dbClient).(*urlReadDatastoreAdapter),
+		urlReadDatastoreAdapter:  *NewUrlReadDatastoreAdapter(dbClient, config).(*urlReadDatastoreAdapter),
 		urlWriteDatastoreAdapter: *NewUrlWriteDatastoreAdapter(dbClient, config).(*urlWriteDatastoreAdapter),
 	}
 }

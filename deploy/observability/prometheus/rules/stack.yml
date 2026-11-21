@@ -1,0 +1,103 @@
+groups:
+  - name: fupi-stack
+    rules:
+      # "no leader" is only meaningful when Patroni members exist, so single mode (no Patroni) never alerts.
+      - alert: PatroniNoLeader
+        expr: sum(patroni_primary) == 0 and count(patroni_postgres_running) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Patroni has members but no leader
+
+      - alert: RedisClusterNotOk
+        expr: redis_cluster_state == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis cluster state is not ok
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: sum(kafka_topic_partition_under_replicated_partition) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka has under-replicated partitions
+
+      - alert: ElasticsearchClusterRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Elasticsearch cluster status is red
+
+      # Fed by the API's http.server.request.duration histogram (OpenTelemetry, via the collector).
+      - alert: RedirectLatencyHigh
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name="fupi"}[5m]))) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: p99 request latency is above 100ms
+
+      # Fed by the outbox relay worker's metrics (OpenTelemetry, via the collector). Both are silent when no worker runs:
+      # the series are absent, so a stack without the worker never raises them.
+      - alert: OutboxBacklogOld
+        expr: max(outbox_relay_oldest_unsent_age_seconds{service_name="fupi-worker"}) > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: The oldest outbox event has been waiting for delivery for more than 5 minutes
+
+      - alert: OutboxEventsParked
+        expr: max(outbox_relay_parked_rows{service_name="fupi-worker"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The outbox relay gave up on events; fix the cause and re-queue them (docs/LocalInfrastructure.md)
+
+      # Workers are up (they report leader = 0 or 1) but none holds the lease, so no backlog gauge is reported at all and the
+      # two alerts above cannot see the stall. Silent when no worker runs: the series are absent.
+      - alert: OutboxNoActiveRelay
+        expr: sum(outbox_relay_leader{service_name="fupi-worker"}) == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Workers are running but none is the active outbox relay, so nothing is delivered
+
+      # Fed by the URL expiry job in the worker. url_expiry_backlog is the true count of ACTIVE URLs past their expiry at the
+      # end of each run, so it is 0 when the job keeps up and stays above 0 when it falls behind or cannot update rows.
+      # Only the active instance reports these, so both are silent when no worker runs or none holds the lease (the
+      # series are absent).
+      - alert: UrlExpiryBacklog
+        expr: max(url_expiry_backlog{service_name="fupi-worker"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: URLs past their expiry have stayed ACTIVE for 15 minutes; the expiry job is behind or cannot update them
+
+      - alert: UrlExpiryStalled
+        expr: time() - max(url_expiry_last_run_seconds{service_name="fupi-worker"}) > 600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The URL expiry job has not completed a run for more than 10 minutes
+
+      # Fed by the API's rate limiter (OpenTelemetry, via the collector). An instance reports 1 while Redis fails and it
+      # limits requests in memory, on its own count, so N instances let up to N times the limit through. Silent when the
+      # limiter runs without Redis or is off: the series is 0 or absent.
+      - alert: RateLimiterOnFallback
+        expr: max(http_ratelimit_fallback_active{service_name="fupi"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The API has been rate limiting in memory for 5 minutes because Redis fails; limits are per instance

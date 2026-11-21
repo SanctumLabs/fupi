@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 )
 
 // MapUserModelToEntity maps a postgresql.User model to an identity.User entity.
@@ -58,6 +58,7 @@ func MapUserModelToEntity(userModel postgresql.User) (identity.User, error) {
 		LastName:            userModel.LastName.String,
 		Email:               userModel.Email,
 		Status:              identity.UserStatus(userModel.Status),
+		Role:                identity.UserRole(userModel.Role),
 		VerificationToken:   userModel.VerificationToken.String,
 		VerificationExpires: userModel.VerificationExpires.Time,
 		Verified:            userModel.Verified,

@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -20,27 +21,43 @@ const (
 	_defaultTimeout  = time.Second
 )
 
+// migrationsTable is the table golang-migrate records its state in. `make migrate` and the compose migrate job use
+// the same name, so every way of running the migrations agrees on what has been applied.
+const migrationsTable = "schema_migrations"
+
+// migrationURL prepares a database URL for golang-migrate: it selects the migrations table, defaults sslmode to
+// disable only when the URL does not say otherwise, and drops the pool_* parameters that pgxpool understands but the
+// migration driver would send to the server as unknown settings.
+func migrationURL(databaseURL string) (string, error) {
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		// The parse error quotes the whole URL, password included, and Migrate logs what it returns.
+		return "", errors.New("the database URL is not a valid URL")
+	}
+
+	query := parsed.Query()
+	if query.Get("sslmode") == "" {
+		query.Set("sslmode", "disable")
+	}
+	for key := range query {
+		if strings.HasPrefix(key, "pool_") {
+			query.Del(key)
+		}
+	}
+	query.Set("x-migrations-table", migrationsTable)
+
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
+}
+
 func Migrate(databaseURL string, migrationPath string, inDocker bool) error {
 	ctx := context.Background()
 
-	// Parse the database URL and properly append sslmode parameter
-	parsedURL, urlErr := url.Parse(databaseURL)
+	databaseURL, urlErr := migrationURL(databaseURL)
 	if urlErr != nil {
 		slog.ErrorContext(ctx, "migrate: invalid DATABASE_URL", "error", urlErr)
 		return urlErr
 	}
-	// Get existing query parameters or create new ones
-	query := parsedURL.Query()
-
-	// Add or override sslmode parameter
-	query.Set("sslmode", "disable")
-	query.Set("x-migrations-table", "bid_schema_migrations")
-
-	// Update the URL with the modified query parameters
-	parsedURL.RawQuery = query.Encode()
-
-	// Use the updated URL
-	databaseURL = parsedURL.String()
 
 	var (
 		attempts = _defaultAttempts
@@ -65,7 +82,7 @@ func Migrate(databaseURL string, migrationPath string, inDocker bool) error {
 	}
 
 	err = m.Up()
-	defer m.Close()
+	defer func() { _, _ = m.Close() }()
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		slog.ErrorContext(ctx, "migrate: up error", "error", err)
 		return err

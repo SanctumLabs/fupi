@@ -6,6 +6,9 @@ on:
       - 'develop'
       - 'main'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Danger CI
@@ -13,24 +16,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [16.x]
+        node-version: [22.x]
 
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Use NodeJS ${{ matrix.node-version }}
-      uses: actions/setup-node@v2
+      uses: actions/setup-node@v7.0.0
       with:
         node-version: ${{ matrix.node-version }}
 
     - name: Get yarn cache directory path
       id: cache-dir-path
-      run: echo "::set-output name=dir::$(yarn cache dir)"
+      run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/cache@v2
+    - uses: actions/cache@v6.1.0
       id: cache # use this to check for `cache-hit` (`steps.cache.outputs.cache-hit != 'true'`)
       with:
         path: |
@@ -45,7 +50,7 @@ jobs:
       run: yarn add danger
 
     - name: Danger CI Check
-      uses: danger/danger-js@9.1.8
+      uses: danger/danger-js@14.0.6
       env:
         CI: true
         GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

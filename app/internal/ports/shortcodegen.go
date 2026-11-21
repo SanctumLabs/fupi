@@ -3,7 +3,7 @@ package ports
 import (
 	"context"
 
-	"github.com/sanctumlabs/curtz/app/internal/domain/url"
+	"github.com/sanctumlabs/fupi/app/internal/domain/url"
 )
 
 type ShortCodeGenerator interface {

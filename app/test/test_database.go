@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/docker/go-connections/nat"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 	"github.com/testcontainers/testcontainers-go"
 	postgresTestContainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -64,7 +64,6 @@ func DefaultPostgresDatabaseConfig(host, port, connectionString string) postgres
 		Name:        TEST_DATABASE_NAME,
 		Port:        port,
 		Url:         connectionString,
-		Schema:      TEST_DATABASE_SCHEMA,
 		MaxConns:    TEST_DATABASE_MAX_CONNS,
 		MinConns:    TEST_DATABASE_MIN_CONNS,
 		ConnTimeout: TEST_DATABASE_CONN_TIMEOUT,

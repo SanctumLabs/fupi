@@ -303,6 +303,30 @@ func (q *Queries) QueryAllUrlsByUserId(ctx context.Context, arg QueryAllUrlsByUs
 	return items, nil
 }
 
+const queryCountExpiredActiveUrls = `-- name: QueryCountExpiredActiveUrls :one
+SELECT
+  COUNT(*)
+FROM urls u
+WHERE u.status = 'ACTIVE'
+  AND u.deleted_at IS NULL
+  AND u.expires_on < $1
+`
+
+// QueryCountExpiredActiveUrls
+//
+//	SELECT
+//	  COUNT(*)
+//	FROM urls u
+//	WHERE u.status = 'ACTIVE'
+//	  AND u.deleted_at IS NULL
+//	  AND u.expires_on < $1
+func (q *Queries) QueryCountExpiredActiveUrls(ctx context.Context, expiresBefore pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, queryCountExpiredActiveUrls, expiresBefore)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const queryExpiredActiveUrls = `-- name: QueryExpiredActiveUrls :many
 SELECT
   u.id, u.user_id, u.short_code, u.custom_alias, u.original_url, u.status, u.expires_on, u.og_title, u.og_description, u.og_image_url, u.metadata, u.created_at, u.updated_at, u.deleted_at
@@ -368,6 +392,36 @@ func (q *Queries) QueryExpiredActiveUrls(ctx context.Context, arg QueryExpiredAc
 	return items, nil
 }
 
+const queryRedirectTargetByCode = `-- name: QueryRedirectTargetByCode :one
+SELECT
+  u.original_url, u.status, u.expires_on
+FROM urls u
+WHERE u.short_code = $1 OR u.custom_alias = $1
+ORDER BY (u.short_code = $1) DESC
+LIMIT 1
+`
+
+type QueryRedirectTargetByCodeRow struct {
+	OriginalUrl string             `db:"original_url" json:"original_url"`
+	Status      UrlStatus          `db:"status" json:"status"`
+	ExpiresOn   pgtype.Timestamptz `db:"expires_on" json:"expires_on"`
+}
+
+// QueryRedirectTargetByCode
+//
+//	SELECT
+//	  u.original_url, u.status, u.expires_on
+//	FROM urls u
+//	WHERE u.short_code = $1 OR u.custom_alias = $1
+//	ORDER BY (u.short_code = $1) DESC
+//	LIMIT 1
+func (q *Queries) QueryRedirectTargetByCode(ctx context.Context, shortCode string) (QueryRedirectTargetByCodeRow, error) {
+	row := q.db.QueryRow(ctx, queryRedirectTargetByCode, shortCode)
+	var i QueryRedirectTargetByCodeRow
+	err := row.Scan(&i.OriginalUrl, &i.Status, &i.ExpiresOn)
+	return i, err
+}
+
 const queryUrlByCustomAlias = `-- name: QueryUrlByCustomAlias :one
 SELECT
   u.id, u.user_id, u.short_code, u.custom_alias, u.original_url, u.status, u.expires_on, u.og_title, u.og_description, u.og_image_url, u.metadata, u.created_at, u.updated_at, u.deleted_at
@@ -427,6 +481,53 @@ type QueryUrlByIdRow struct {
 func (q *Queries) QueryUrlById(ctx context.Context, id pgtype.UUID) (QueryUrlByIdRow, error) {
 	row := q.db.QueryRow(ctx, queryUrlById, id)
 	var i QueryUrlByIdRow
+	err := row.Scan(
+		&i.Url.ID,
+		&i.Url.UserID,
+		&i.Url.ShortCode,
+		&i.Url.CustomAlias,
+		&i.Url.OriginalUrl,
+		&i.Url.Status,
+		&i.Url.ExpiresOn,
+		&i.Url.OgTitle,
+		&i.Url.OgDescription,
+		&i.Url.OgImageUrl,
+		&i.Url.Metadata,
+		&i.Url.CreatedAt,
+		&i.Url.UpdatedAt,
+		&i.Url.DeletedAt,
+	)
+	return i, err
+}
+
+const queryUrlByOriginalUrl = `-- name: QueryUrlByOriginalUrl :one
+SELECT
+  u.id, u.user_id, u.short_code, u.custom_alias, u.original_url, u.status, u.expires_on, u.og_title, u.og_description, u.og_image_url, u.metadata, u.created_at, u.updated_at, u.deleted_at
+FROM urls u
+WHERE u.original_url = $1
+  AND u.deleted_at IS NULL
+ORDER BY u.created_at ASC
+LIMIT 1
+`
+
+type QueryUrlByOriginalUrlRow struct {
+	Url Url `db:"url" json:"url"`
+}
+
+// idx_urls_original_url makes original_url unique among non-deleted rows, so at most one row can
+// match. The ORDER BY and LIMIT are kept as cheap insurance so the result stays deterministic even
+// if that index were ever dropped.
+//
+//	SELECT
+//	  u.id, u.user_id, u.short_code, u.custom_alias, u.original_url, u.status, u.expires_on, u.og_title, u.og_description, u.og_image_url, u.metadata, u.created_at, u.updated_at, u.deleted_at
+//	FROM urls u
+//	WHERE u.original_url = $1
+//	  AND u.deleted_at IS NULL
+//	ORDER BY u.created_at ASC
+//	LIMIT 1
+func (q *Queries) QueryUrlByOriginalUrl(ctx context.Context, originalUrl string) (QueryUrlByOriginalUrlRow, error) {
+	row := q.db.QueryRow(ctx, queryUrlByOriginalUrl, originalUrl)
+	var i QueryUrlByOriginalUrlRow
 	err := row.Scan(
 		&i.Url.ID,
 		&i.Url.UserID,

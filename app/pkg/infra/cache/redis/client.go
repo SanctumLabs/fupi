@@ -2,26 +2,17 @@ package redis
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
-	"time"
 
 	"github.com/google/wire"
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	redisGo "github.com/redis/go-redis/v9"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/cache"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/cache"
 )
 
-const (
-	_statsEnabled        = true
-	_defaultConnAttempts = 3
-	_defaultConnTimeout  = time.Second
-)
-
-// redisClient is a wrapper around
+// redisClient is a wrapper around a go-redis universal client
 type redisClient struct {
-	connAttempts int
-	connTimeout  time.Duration
-
 	// statsEnabled sets enabling stats to true
 	statsEnabled bool
 
@@ -40,50 +31,35 @@ var (
 	RedisCacheSet                   = wire.NewSet(NewRedisClient)
 )
 
-// NewRedisClient creates a new redis client
+// NewRedisClient builds a client for the configured addresses: one address gives a plain client, several give a
+// cluster client. It performs no I/O. go-redis dials lazily and reconnects by itself, so Redis may come up after the
+// caller and the client picks it up; use Ping to check reachability.
 func NewRedisClient(config RedisClientConfig) (cache.CacheClient, error) {
-	rc := &redisClient{
-		connAttempts: _defaultConnAttempts,
-		connTimeout:  _defaultConnTimeout,
+	if len(config.Address) == 0 {
+		return nil, errors.New("redis: at least one address is required")
 	}
 
-	var err error
-	for rc.connAttempts > 0 {
-		options := &redisGo.UniversalOptions{
-			Addrs:      config.Address,
-			Username:   config.Username,
-			Password:   config.Password,
-			DB:         config.Database,
-			MasterName: config.MasterName,
-		}
+	client := redisGo.NewUniversalClient(&redisGo.UniversalOptions{
+		Addrs:      config.Address,
+		Username:   config.Username,
+		Password:   config.Password,
+		DB:         config.Database,
+		MasterName: config.MasterName,
+		// Without it go-redis ignores a context deadline and waits for its own read timeout, so a caller cannot bound
+		// a command on a hung Redis.
+		ContextTimeoutEnabled: true,
+	})
 
-		client := redisGo.NewUniversalClient(options)
-		rc.client = client
-
-		statusCmd := client.Ping(context.Background())
-		err = statusCmd.Err()
-		if err != nil {
-			slog.Error(fmt.Sprintf("RedisClient> 🚫 Redis failed to connect with error %s, attempts left: %d", statusCmd, rc.connAttempts))
-			break
-		}
-
-		slog.Warn(fmt.Sprintf("RedisClient> Redis is trying to connect, attempts left: %d", rc.connAttempts))
-
-		time.Sleep(rc.connTimeout)
-
-		rc.connAttempts--
+	// A span and a metric per command. The command text is switched off: keys and values can hold URLs and tokens (D7).
+	// Instrumenting only registers hooks; a failure costs the telemetry, not the client.
+	if err := redisotel.InstrumentTracing(client, redisotel.WithDBStatement(false)); err != nil {
+		slog.Warn("redis: tracing is not enabled", "error", err)
 	}
-	if err != nil {
-		slog.Error(fmt.Sprintf("RedisClient> 🚫 failed to connect to Redis, Error: %s", err))
-		return nil, err
+	if err := redisotel.InstrumentMetrics(client); err != nil {
+		slog.Warn("redis: metrics are not enabled", "error", err)
 	}
 
-	slog.Info(
-		"RedisClient> ✅ connected to Redis",
-		"host", config.Host,
-		"port", config.Port,
-	)
-	return rc, nil
+	return &redisClient{client: client}, nil
 }
 
 func (p *redisClient) Configure(opts ...Option) cache.CacheClient {
@@ -92,6 +68,16 @@ func (p *redisClient) Configure(opts ...Option) cache.CacheClient {
 	}
 
 	return p
+}
+
+// Ping checks that Redis answers
+func (rc *redisClient) Ping(ctx context.Context) error {
+	return rc.client.Ping(ctx).Err()
+}
+
+// Close closes the connections held by the client
+func (rc *redisClient) Close() error {
+	return rc.client.Close()
 }
 
 // Set adds an item with a given key to the cache
@@ -139,4 +125,14 @@ func (rc *redisClient) Exists(ctx context.Context, key string) bool {
 func (rc *redisClient) Delete(ctx context.Context, key string) error {
 	statusCmd := rc.client.Del(ctx, key)
 	return statusCmd.Err()
+}
+
+// UniversalClient returns the go-redis client behind a cache client built by NewRedisClient, for callers that need
+// commands the cache interface does not offer. It reports false for any other cache client.
+func UniversalClient(client cache.CacheClient) (redisGo.UniversalClient, bool) {
+	rc, ok := client.(*redisClient)
+	if !ok {
+		return nil, false
+	}
+	return rc.client, true
 }

@@ -1,82 +1,236 @@
-// Command curtz runs the Curtz HTTP API.
-//
-// Only the Identity bounded context is wired up so far; the URL context follows once its
-// application layer exists.
+// Command fupi runs the Fupi HTTP API: the Identity and URL bounded contexts.
 package main
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"regexp"
+	"strconv"
+	"syscall"
 	"time"
 
+	"github.com/go-redis/redis_rate/v10"
+	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
-	apimiddleware "github.com/sanctumlabs/curtz/app/api/middleware"
-	identityapi "github.com/sanctumlabs/curtz/app/api/v1/identity"
-	"github.com/sanctumlabs/curtz/app/config"
-	"github.com/sanctumlabs/curtz/app/internal/adapters/jwtauth"
-	"github.com/sanctumlabs/curtz/app/internal/adapters/notifications"
-	identitydatastore "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/identity"
-	identityapp "github.com/sanctumlabs/curtz/app/internal/application/identity"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/env"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/server"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/server/router"
-	"github.com/sanctumlabs/curtz/app/pkg/jwt"
-	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
+	apimiddleware "github.com/sanctumlabs/fupi/app/api/middleware"
+	"github.com/sanctumlabs/fupi/app/api/probes"
+	identityapi "github.com/sanctumlabs/fupi/app/api/v1/identity"
+	urlapi "github.com/sanctumlabs/fupi/app/api/v1/url"
+	"github.com/sanctumlabs/fupi/app/config"
+	"github.com/sanctumlabs/fupi/app/internal/adapters/geolocation"
+	"github.com/sanctumlabs/fupi/app/internal/adapters/jwtauth"
+	kafkaadapter "github.com/sanctumlabs/fupi/app/internal/adapters/kafka"
+	"github.com/sanctumlabs/fupi/app/internal/adapters/notifications"
+	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
+	identitydatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/identity"
+	urldatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/url"
+	redisadapter "github.com/sanctumlabs/fupi/app/internal/adapters/redis"
+	identityapp "github.com/sanctumlabs/fupi/app/internal/application/identity"
+	urlapp "github.com/sanctumlabs/fupi/app/internal/application/url"
+	"github.com/sanctumlabs/fupi/app/pkg"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/cache"
+	cacheredis "github.com/sanctumlabs/fupi/app/pkg/infra/cache/redis"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/monitoring/health"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/queue/kafka"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/server"
+	servermw "github.com/sanctumlabs/fupi/app/pkg/infra/server/middleware"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/telemetry"
+	"github.com/sanctumlabs/fupi/app/pkg/jwt"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
 )
 
-const baseURI = "/api/v1/curtz"
+const (
+	baseURI = "/api/v1/fupi"
 
+	// redisStartupPingTimeout bounds the one ping that only decides which startup line is logged.
+	redisStartupPingTimeout = 2 * time.Second
+
+	// urlAccessedTopic is where redirects publish URLAccessed; urlAccessedBuffer is how many visits may wait for the
+	// publisher before new ones are dropped.
+	urlAccessedTopic  = "url.accessed"
+	urlAccessedBuffer = 1024
+)
+
+// startTelemetry is telemetry.Start. It is a variable so a test can keep run from exporting to a collector.
+var startTelemetry = telemetry.Start
+
+// healthcheckTimeout bounds the container health probe. It is a variable so a test can shorten it.
+var healthcheckTimeout = 2 * time.Second
+
+// @title                      Fupi API
+// @version                    2.0
+// @description                Shortens urls, redirects visitors to them and manages the accounts that own them.
+// @BasePath                   /
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                Send "Bearer <access token>", the token returned by login.
 func main() {
-	if err := godotenv.Load(); err != nil {
-		slog.Warn("no .env file found, relying on the environment", "error", err)
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck(os.LookupEnv, os.Stdout))
 	}
 
-	envConfig := env.NewEnvConfig()
+	dotenvErr := godotenv.Load()
 
-	dbClient, dbErr := postgres.NewPostgresClient(postgres.PostgresDatabaseConfig{
-		Host:            envConfig.EnvOr("DATABASE_HOST", "localhost"),
-		Username:        envConfig.EnvOr("DATABASE_USERNAME", "curtz-user"),
-		Password:        envConfig.EnvOr("DATABASE_PASSWORD", "curtz-pass"),
-		Name:            envConfig.EnvOr("DATABASE_NAME", "curtzdb"),
-		Port:            envConfig.EnvOr("DATABASE_PORT", "5433"),
-		Url:             envConfig.EnvOr("DATABASE_URL", ""),
-		SslMode:         envConfig.EnvOr("DATABASE_SSL_MODE", "disable"),
-		MaxConns:        envConfig.EnvInt32Or("DATABASE_MAX_CONNS", 30),
-		MinConns:        envConfig.EnvInt32Or("DATABASE_MIN_CONNS", 5),
-		MaxConnLifetime: envConfig.EnvDurationOr("DATABASE_MAX_CONN_LIFETIME", 1, time.Hour),
-		MaxConnIdleTime: envConfig.EnvDurationOr("DATABASE_MAX_CONN_IDLE_TIME", 30, time.Minute),
-		ConnTimeout:     envConfig.EnvDurationOr("DATABASE_CONN_TIMEOUT", 30, time.Second),
-		QueryTimeout:    envConfig.EnvDurationOr("DATABASE_QUERY_TIMEOUT", 10, time.Second),
-	})
-	if dbErr != nil {
-		slog.Error("failed to connect to the database", "error", dbErr)
+	cfg, err := config.Load(os.LookupEnv)
+	// The logger is installed once the configuration is read, so LOG_LEVEL and LOG_FORMAT apply. On a configuration error
+	// Load still returns the default logging settings, so the error itself is logged as JSON like everything else.
+	slog.SetDefault(telemetry.NewLogger(os.Stdout, cfg.Logging.Format, cfg.Logging.Level, telemetry.ServiceName(telemetry.DefaultServiceName)))
+	if dotenvErr != nil {
+		slog.Warn("no .env file found, relying on the environment", "error", dotenvErr)
+	}
+	if err != nil {
+		slog.Error("invalid configuration", "error", err)
 		os.Exit(1)
+	}
+	for _, warning := range cfg.Warnings {
+		slog.Warn(warning)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		// Hand signal handling back to the runtime as soon as the first signal arrives, so a second Ctrl-C ends a
+		// stuck drain immediately instead of being swallowed.
+		stop()
+	}()
+
+	err = run(ctx, cfg)
+	stop()
+	if err != nil {
+		slog.Error("fupi stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+// newRateLimiter builds the rate limiting middleware. Limits are shared across instances through Redis when the cache
+// is a Redis client; otherwise each instance limits on its own.
+func newRateLimiter(cfg config.App, client cache.CacheClient) (fiber.Handler, error) {
+	rule := func(r config.RateLimitRule) servermw.RateLimitRule {
+		return servermw.RateLimitRule{Max: r.Max, Window: r.Window}
+	}
+	rl := cfg.RateLimit
+
+	limiterCfg := servermw.RateLimiterConfig{
+		Groups: apimiddleware.RateLimitGroups(baseURI, urlapi.RedirectPathPattern, apimiddleware.RateLimitRules{
+			Auth:     rule(rl.Auth),
+			Create:   rule(rl.Create),
+			Redirect: rule(rl.Redirect),
+			Default:  rule(rl.Default),
+		}),
+		// The same public paths as the auth middleware. "/docs" alone must not be a prefix: "/docs0000" is a short code.
+		ExemptPaths:     []string{probes.LivePath, probes.ReadyPath, "/docs"},
+		ExemptPrefixes:  []string{"/docs/"},
+		ClientIP:        servermw.ClientIPConfig{Header: cfg.Server.ProxyHeader, TrustedProxies: cfg.Server.TrustedProxies},
+		RedisTimeout:    rl.RedisTimeout,
+		RedisRetryAfter: rl.RedisRetryAfter,
+	}
+	if universal, ok := cacheredis.UniversalClient(client); ok {
+		limiterCfg.Redis = redis_rate.NewLimiter(universal)
+	}
+	return servermw.RateLimiterMiddleware(limiterCfg)
+}
+
+// healthcheck probes the API running on this host and returns the process exit code: 0 when GET /health answers 200,
+// 1 otherwise. It reads only the server settings, so the container's HEALTHCHECK needs no database or Redis settings and
+// works in an image that has no shell, curl or wget. It does not read .env: the container's environment is the contract.
+func healthcheck(lookup config.Lookup, out io.Writer) int {
+	server, err := config.LoadServer(lookup)
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "healthcheck: invalid configuration: %v\n", err)
+		return 1
+	}
+
+	target := "http://" + net.JoinHostPort(probeHost(server.Host), strconv.Itoa(server.Port)) + probes.LivePath
+	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "healthcheck: %v\n", err)
+		return 1
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "healthcheck: %v\n", err)
+		return 1
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		_, _ = fmt.Fprintf(out, "healthcheck: %s answered %d\n", target, resp.StatusCode)
+		return 1
+	}
+	_, _ = fmt.Fprintln(out, "healthcheck: ok")
+	return 0
+}
+
+// probeHost turns a wildcard bind address, which cannot be dialed, into the loopback address that reaches it. Server
+// binds exactly the configured host, so any other host is dialed as given.
+func probeHost(host string) string {
+	switch host {
+	case "", "0.0.0.0", "::":
+		return "127.0.0.1"
+	}
+	return host
+}
+
+// run builds the API from cfg and serves it until ctx is cancelled, then drains in-flight requests and closes the
+// data clients. Postgres is required: failing to reach it is an error. Redis is optional: failing to reach it is
+// logged and the API carries on (readiness reports it as down).
+func run(ctx context.Context, cfg config.App) error {
+	// The deferred flush covers the early returns; the normal path flushes right after the server drains (below).
+	flushTelemetry := startTelemetry(ctx, telemetry.Options{ServiceVersion: pkg.Version, Environment: cfg.Environment})
+	defer flushTelemetry()
+
+	dbClient, err := postgres.NewPostgresClient(cfg.Database.Postgres)
+	if err != nil {
+		return fmt.Errorf("connect to postgres: %w", err)
 	}
 	defer dbClient.Close()
 
+	cache, err := cacheredis.NewRedisClient(cfg.Redis)
+	if err != nil {
+		return fmt.Errorf("create redis client: %w", err)
+	}
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			slog.Warn("closing redis", "error", closeErr)
+		}
+	}()
+
+	pingCtx, cancel := context.WithTimeout(ctx, redisStartupPingTimeout)
+	if pingErr := cache.Ping(pingCtx); pingErr != nil {
+		slog.Warn("redis is down, continuing without it", "addresses", cfg.Redis.Address, "error", pingErr)
+	} else {
+		slog.Info("redis is up", "addresses", cfg.Redis.Address)
+	}
+	cancel()
+
+	registry := health.NewRegistry(health.DefaultCheckTimeout)
+	registry.Add(health.Check{Name: "postgres", Required: true, Fn: dbClient.HealthCheck})
+	registry.Add(health.Check{Name: "redis", Required: false, Fn: cache.Ping})
+
 	dbConfig := database.Config{
-		OperationTimeout: envConfig.EnvDurationOr("DATABASE_OPERATION_TIMEOUT", 30, time.Second),
+		OperationTimeout: cfg.Database.OperationTimeout,
 		RetryConfig:      recoveryutils.DefaultRetryConfig,
 	}
 
-	authConfig := config.AuthConfig{
-		Jwt: config.Jwt{
-			Secret:             envConfig.EnvOr("AUTH_SECRET", "curtz-secret"),
-			Issuer:             envConfig.EnvOr("AUTH_ISSUER", "curtz"),
-			ExpireDelta:        envConfig.EnvIntOr("AUTH_EXPIRE_DELTA", 15),
-			RefreshExpireDelta: envConfig.EnvIntOr("AUTH_REFRESH_EXPIRE_DELTA", 24),
-		},
-	}
+	tokenService := jwtauth.NewTokenService(cfg.Auth, jwt.New())
 
-	tokenService := jwtauth.NewTokenService(authConfig, jwt.New())
-
-	// No email transport is configured yet, so verification links are logged rather than sent.
-	notifier := notifications.NewEmailNotifier(
-		envConfig.EnvOr("APP_BASE_URL", "http://localhost:8085"),
-		notifications.NewLoggingEmailSender(),
-	)
+	// No email transport is configured yet, so emails are logged rather than sent. The verification link carries a live
+	// token, so the body is logged only in development and test.
+	notifier := notifications.NewEmailNotifier(cfg.Server.BaseURL+baseURI,
+		notifications.NewLoggingEmailSender(config.IsDevelopmentOrTest(cfg.Environment)))
 
 	identityService := identityapp.NewService(
 		identitydatastore.NewUserDatastoreAdapter(dbClient, dbConfig),
@@ -84,36 +238,80 @@ func main() {
 		notifier,
 	)
 
-	srv := server.NewServer(server.ServerConfig{
-		Header:      envConfig.EnvOr("SERVER_HEADER", "Curtz"),
-		Host:        envConfig.EnvOr("SERVER_HOST", "0.0.0.0"),
-		Port:        envConfig.EnvIntOr("HTTP_PORT", 8085),
-		AppName:     envConfig.EnvOr("SERVER_NAME", "Curtz"),
-		Version:     envConfig.EnvOr("SERVER_VERSION", "1.0.0"),
-		Environment: envConfig.EnvOr("ENVIRONMENT", "development"),
+	// Best-effort analytics (ADR-0021): the producer connects lazily, so an unreachable Kafka never stops startup.
+	producer, err := kafka.NewProducer(kafka.Config{
+		Brokers:        cfg.Kafka.Brokers,
+		ClientID:       cfg.Kafka.ClientID,
+		PublishTimeout: cfg.Kafka.PublishTimeout,
 	})
+	if err != nil {
+		return fmt.Errorf("create the kafka producer: %w", err)
+	}
+	publisher := kafkaadapter.NewEventPublisher(producer)
+	defer publisher.Close()
+	accessRecorder := urlapp.NewAccessRecorder(geolocation.Unknown{}, publisher, urlAccessedTopic, urlAccessedBuffer)
+	defer accessRecorder.Close()
+
+	urlService := urlapp.NewService(
+		urldatastore.NewUrlDatastoreAdapter(dbClient, dbConfig),
+		postgresrepo.NewSequenceShortCodeGenerator(dbClient, []byte(cfg.ShortCode.Key)),
+		urlapp.WithRedirectCache(redisadapter.NewRedirectCache(cache), cfg.RedirectCache.TTL, cfg.RedirectCache.AbsentTTL),
+	).WithAccessRecorder(accessRecorder)
 
 	// Everything is authenticated unless it is listed here. Registration, login, token refresh
-	// and email verification must be reachable without a token, by definition.
-	srv.Use(apimiddleware.AuthMiddleware(apimiddleware.AuthConfig{
+	// and email verification must be reachable without a token, by definition, and so must the probes
+	// and the short-url redirect.
+	auth := apimiddleware.AuthMiddleware(apimiddleware.AuthConfig{
 		TokenService: tokenService,
 		PublicPaths: []string{
 			baseURI + "/auth/register",
 			baseURI + "/auth/login",
 			baseURI + "/auth/oauth/token",
 			baseURI + "/auth/verify",
-			"/health",
-			"/metrics",
+			probes.LivePath,
+			probes.ReadyPath,
 		},
 		PublicPrefixes: []string{"/docs/"},
-	}))
-
-	srv.RegisterHandlers([]router.Router{
-		identityapi.NewRouter(baseURI, identityService),
+		PublicPatterns: []*regexp.Regexp{urlapi.RedirectPathPattern},
 	})
 
-	if err := srv.Listen(); err != nil {
-		slog.Error("server stopped", "error", err)
-		os.Exit(1)
+	// The limiter runs after authentication, so url creation is limited per user. Without it the guards are just auth.
+	guards := []fiber.Handler{auth}
+	if cfg.RateLimit.Enabled {
+		limit, limitErr := newRateLimiter(cfg, cache)
+		if limitErr != nil {
+			return fmt.Errorf("create the rate limiter: %w", limitErr)
+		}
+		guards = append(guards, limit)
 	}
+	rl := cfg.RateLimit
+	perWindow := func(r config.RateLimitRule) string { return fmt.Sprintf("%d per %s", r.Max, r.Window) }
+	slog.Info("rate limiting", "enabled", rl.Enabled,
+		"auth", perWindow(rl.Auth), "create", perWindow(rl.Create), "redirect", perWindow(rl.Redirect), "default", perWindow(rl.Default))
+
+	srv := server.NewServer(server.ServerConfig{
+		Header:      cfg.Server.Header,
+		Host:        cfg.Server.Host,
+		Port:        cfg.Server.Port,
+		AppName:     cfg.Server.Name,
+		Version:     cfg.Server.Version,
+		Environment: cfg.Environment,
+		ProbePaths:  []string{probes.LivePath, probes.ReadyPath},
+		Guards:      guards,
+	})
+
+	srv.RegisterHandlers([]router.Router{
+		probes.NewRouter(registry),
+		identityapi.NewRouter(baseURI, identityService),
+		// Last: its redirect matches any single-segment path.
+		urlapi.NewRouter(baseURI, cfg.Server.BaseURL, urlService, identityService),
+	})
+
+	serveErr := srv.Serve(ctx, cfg.ShutdownTimeout, registry.SetDraining)
+
+	// The server has drained or given up: export the last spans and metrics now, before the data clients close. Closing the
+	// Postgres pool waits for every connection a stuck request still holds, which can outlast the container's stop grace
+	// period and would cost the final export of exactly the incident worth diagnosing.
+	flushTelemetry()
+	return serveErr
 }

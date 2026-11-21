@@ -1,5 +1,7 @@
 package server
 
+import "github.com/gofiber/fiber/v2"
+
 const (
 	EnvServerHeader   = "SERVER_HEADER"
 	EnvServerHost     = "SERVER_HOST"
@@ -20,6 +22,11 @@ type (
 		AppName     string `env:"SERVER_NAME" env-required:"false" env-description:"Application name" env-default:"Bids Service"`
 		Version     string `env:"SERVER_VERSION" env-required:"false" env-description:"Application Version" env-default:"1.0.0"`
 		Environment string `env:"ENVIRONMENT" env-required:"false" env-description:"Application Environment" env-default:"production"`
+		// ProbePaths are the health probe routes. They get no span and no metric, and their access log line is debug level.
+		ProbePaths []string
+		// Guards run in order on every request, after the security headers and panic recovery and before idempotency, so the responses they
+		// give still carry the headers and are never stored against an idempotency key.
+		Guards []fiber.Handler
 	}
 
 	GrpcServerConfig struct {

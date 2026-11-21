@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 type customAliasTestCase struct {

@@ -130,3 +130,12 @@ ORDER BY
     THEN us.deleted_at END DESC
 LIMIT sqlc.arg(limit_by)
 OFFSET sqlc.arg(current_offset);
+
+-- name: QueryUrlScanExistsByUrlIdAndProvider :one
+SELECT EXISTS (
+  SELECT 1
+  FROM url_scans us
+  WHERE us.url_id = $1
+    AND us.provider = $2
+    AND us.deleted_at IS NULL
+);

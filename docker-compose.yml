@@ -1,30 +1,32 @@
-version: "3.8"
+# Local infrastructure for Fupi. Nothing starts without a profile: use `make infra.<stack>.up`
+# (see docs/LocalInfrastructure.md). Each stack lives in deploy/<stack>/compose.yml.
+name: fupi
 
-services:
-  documentdb:
-    image: mongo:4.4.14
-    container_name: curtz-documentdb
-    hostname: documentdb
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: curtzUser
-      MONGO_INITDB_ROOT_PASSWORD: curtzPassword
-      MONGO_INITDB_DATABASE: curtzdb
-      MONGO_INITDB_USER: curtzUser
-      MONGO_INITDB_PASSWORD: curtzPassword
-    volumes:
-      - docdb:/data/db
+include:
+  - path: deploy/kafka/compose.yml
+    env_file: .env
+  - path: deploy/redis/compose.yml
+    env_file: .env
+  - path: deploy/postgres/compose.yml
+    env_file: .env
+  - path: deploy/elk/compose.yml
+    env_file: .env
+  - path: deploy/observability/compose.yml
+    env_file: .env
+  - path: deploy/legacy/compose.yml
+    env_file: .env
+  - path: deploy/app/compose.yml
+    env_file: .env
+  - path: deploy/worker/compose.yml
+    env_file: .env
 
-  cache:
-    image: redis:7.0.2
-    container_name: curtz-cache
-    hostname: cache
-    ports:
-      - "6379:6379"
-    volumes:
-      - cache:/data
-
-volumes:
-  docdb:
-  cache:
+networks:
+  fupi:
+    name: fupi
+    driver: bridge
+    # Redis Cluster nodes persist their peers' IP addresses, so they get fixed addresses (.11-.16) from the
+    # lower half of the subnet; every other container is assigned from the upper half (ip_range).
+    ipam:
+      config:
+        - subnet: ${FUPI_NET_PREFIX:-172.29.0}.0/24
+          ip_range: ${FUPI_NET_PREFIX:-172.29.0}.128/25

@@ -3,7 +3,7 @@ package identity
 import (
 	"context"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/ports/repository"
+	"github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
 )
 
 type (

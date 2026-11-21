@@ -2,12 +2,7 @@ package logger
 
 import (
 	"context"
-	"sync"
 )
-
-// globalLoggers is the collection of App Logger that is shared globally.
-var globalLoggers = map[string]Logger{}
-var globalLoggersLock = sync.RWMutex{}
 
 // Logger that defines how loggers should be implemented
 type Logger interface {

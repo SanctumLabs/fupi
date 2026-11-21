@@ -1,0 +1,36 @@
+type: http_request
+model: http_request
+id: rq_P7FpUHBZ5z
+createdAt: 2026-10-08T16:13:18.794647
+updatedAt: 2026-10-08T16:20:58.349048
+workspaceId: wk_J5K7834vTe
+folderId: fl_AWSqb83Suw
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: ''
+headers: []
+method: GET
+name: Worker Ready
+sortPriority: 111.1111111111111
+url: ${[ WORKER_HOST ]}/health/ready
+urlParameters: []
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingHttpVersion:
+  enabled: false
+  value: auto

@@ -10,9 +10,14 @@ tidy: ## Removes unused dependencies and adds any missing dependencies
 	go mod tidy -v
 
 .PHONY: run
-run: ## Runs the project without hot reloading, useful for production testing and debugging
+run: ## Runs the project without hot reloading, useful for local testing and debugging
 	@echo "${GREEN} Running application ${NC}"
 	go run app/cmd/main.go
+
+.PHONY: run.worker
+run.worker: ## Runs the worker without hot reloading, useful for local testing and debugging
+	@echo "${GREEN} Running worker ${NC}"
+	go run app/cmd/worker/main.go
 
 .PHONY: run.dev
 run.dev: ## Runs the project in development mode with hot reloading using air
@@ -25,10 +30,10 @@ run.dev.d: ## Runs the project in development mode with hot reloading using air 
 	@echo "${GREEN} Running application in development mode with debug enabled ${NC}"
 	air -d
 
-.PHONY: runWithMigrations
-run.with.migrations: ## Runs the project applying migrations
-	@echo "${GREEN} Running application ${NC}"
-	cd cmd && CGO_ENABLED=0 go run -tags migrate main.go
+.PHONY: run.with.migrations
+run.with.migrations: ## Applies the migrations with the migrator command, then runs the project
+	@echo "${GREEN} Applying migrations, then running application ${NC}"
+	CGO_ENABLED=0 go run ./app/cmd/migrator && CGO_ENABLED=0 go run app/cmd/main.go
 
 .PHONY: fmt
 fmt: ## gofmt and goimports all go files
@@ -48,7 +53,7 @@ lint: ## Runs linting on the project (usage make lint CURRENT_DIR=/path/to/proje
 .PHONY: build
 build: ## Builds the application binary and outputs it to the bin directory
 	@echo "${GREEN} Building application ${NC}"
-	go build -o $(BIN_DIR)/curtz app/cmd/main.go
+	go build -o $(BIN_DIR)/fupi app/cmd/main.go
 	@echo "${GREEN} Done building application ${NC}"
 
 all: install lint

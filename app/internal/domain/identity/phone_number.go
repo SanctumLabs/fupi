@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"regexp"
 
-	"github.com/sanctumlabs/curtz/app/pkg/validators"
+	"github.com/sanctumlabs/fupi/app/pkg/validators"
 )
 
 // PhoneNumber is a value object representing a phone number in the system.

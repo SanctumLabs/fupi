@@ -10,8 +10,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var customRecoveryFunc recovery.RecoveryHandlerFuncContext
-
 func GrpcServerRecoveryUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		customRecoveryFunc := func(ctx context.Context, p any) (err error) {

@@ -7,17 +7,17 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/onsi/ginkgo/v2"
-	mockpostgresrepo "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/mocks"
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	mockpostgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql/mocks"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	mockidentity "github.com/sanctumlabs/curtz/app/internal/domain/identity/mocks"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	mockdatabase "github.com/sanctumlabs/curtz/app/pkg/infra/database/mocks"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
-	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
+	mockpostgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/mocks"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	mockpostgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql/mocks"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	mockidentity "github.com/sanctumlabs/fupi/app/internal/domain/identity/mocks"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	mockdatabase "github.com/sanctumlabs/fupi/app/pkg/infra/database/mocks"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -86,7 +86,7 @@ var _ = ginkgo.Describe("User Write Datastore Adapter Unit Test Suite", ginkgo.O
 			registered, registerErr := identity.Register(identity.RegisterUserParams{
 				Username:  "johndoe",
 				FirstName: "John",
-				Email:     "john.doe@curtz.com",
+				Email:     "john.doe@fupi.com",
 			})
 			assert.NoError(ginkgo.GinkgoT(), registerErr)
 			return registered

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/sanctumlabs/curtz/app/internal/ports"
+	"github.com/sanctumlabs/fupi/app/internal/ports"
 )
 
 // EmailSender sends a single email. Splitting it out keeps the verification-link wording in the
@@ -22,13 +22,14 @@ type emailNotifier struct {
 
 var _ ports.Notifier = (*emailNotifier)(nil)
 
-// NewEmailNotifier creates a Notifier that emails verification links pointing at baseURL.
+// NewEmailNotifier creates a Notifier that emails verification links pointing at baseURL, the address the API's
+// routes are served under including their prefix (for example https://fupi.io/api/v1/fupi).
 func NewEmailNotifier(baseURL string, sender EmailSender) ports.Notifier {
 	return &emailNotifier{baseURL: baseURL, sender: sender}
 }
 
 func (n *emailNotifier) SendEmailVerification(ctx context.Context, recipient, token string) error {
-	subject := "Welcome to Curtz, kindly verify your account"
+	subject := "Welcome to Fupi, kindly verify your account"
 	body := fmt.Sprintf("Click on link %s/auth/verify?v=%s to verify your account", n.baseURL, token)
 
 	if err := n.sender.SendEmail(ctx, recipient, subject, body); err != nil {
@@ -40,16 +41,21 @@ func (n *emailNotifier) SendEmailVerification(ctx context.Context, recipient, to
 // LoggingEmailSender writes emails to the log instead of delivering them. It carries over the
 // behaviour of the pre-v2 email service, which was a no-op stub, so the registration flow works
 // end to end. Replace it with a real transport (SMTP, SES) before going to production.
-type LoggingEmailSender struct{}
+type LoggingEmailSender struct {
+	// includeBody logs the body too. A verification email's body carries a live token, so this is for development and
+	// test only, where it is the one way to follow the link.
+	includeBody bool
+}
 
-func NewLoggingEmailSender() EmailSender {
-	return &LoggingEmailSender{}
+func NewLoggingEmailSender(includeBody bool) EmailSender {
+	return &LoggingEmailSender{includeBody: includeBody}
 }
 
 func (s *LoggingEmailSender) SendEmail(ctx context.Context, recipient, subject, body string) error {
-	slog.WarnContext(ctx, "email not delivered: no email transport is configured",
-		"recipient", recipient,
-		"subject", subject,
-	)
+	attrs := []any{"recipient", recipient, "subject", subject}
+	if s.includeBody {
+		attrs = append(attrs, "body", body)
+	}
+	slog.WarnContext(ctx, "email not delivered: no email transport is configured", attrs...)
 	return nil
 }

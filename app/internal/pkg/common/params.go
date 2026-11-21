@@ -10,6 +10,10 @@ type RequestParams struct {
 	// IsActive includes active records in the result of the query
 	IsActive bool
 
+	// Status restricts the result to records in this status. Empty means no restriction. Its values are owned by the
+	// entity being queried, so each datastore validates and maps it itself.
+	Status string
+
 	// Limit is the page size
 	Limit int
 
@@ -37,6 +41,13 @@ func WithRequestLimit(limit int) RequestParamOptions {
 func WithOffset(offset int) RequestParamOptions {
 	return func(rp *RequestParams) {
 		rp.Offset = offset
+	}
+}
+
+// WithStatus restricts the result to records in the given status
+func WithStatus(status string) RequestParamOptions {
+	return func(rp *RequestParams) {
+		rp.Status = status
 	}
 }
 

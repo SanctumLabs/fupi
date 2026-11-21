@@ -484,3 +484,34 @@ func (q *Queries) QueryUrlScanByProvider(ctx context.Context, arg QueryUrlScanBy
 	}
 	return items, nil
 }
+
+const queryUrlScanExistsByUrlIdAndProvider = `-- name: QueryUrlScanExistsByUrlIdAndProvider :one
+SELECT EXISTS (
+  SELECT 1
+  FROM url_scans us
+  WHERE us.url_id = $1
+    AND us.provider = $2
+    AND us.deleted_at IS NULL
+)
+`
+
+type QueryUrlScanExistsByUrlIdAndProviderParams struct {
+	UrlID    pgtype.UUID `db:"url_id" json:"url_id"`
+	Provider string      `db:"provider" json:"provider"`
+}
+
+// QueryUrlScanExistsByUrlIdAndProvider
+//
+//	SELECT EXISTS (
+//	  SELECT 1
+//	  FROM url_scans us
+//	  WHERE us.url_id = $1
+//	    AND us.provider = $2
+//	    AND us.deleted_at IS NULL
+//	)
+func (q *Queries) QueryUrlScanExistsByUrlIdAndProvider(ctx context.Context, arg QueryUrlScanExistsByUrlIdAndProviderParams) (bool, error) {
+	row := q.db.QueryRow(ctx, queryUrlScanExistsByUrlIdAndProvider, arg.UrlID, arg.Provider)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}

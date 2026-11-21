@@ -1,0 +1,44 @@
+type: http_request
+model: http_request
+id: rq_cu6bkc7n9j
+createdAt: 2026-10-08T17:27:32.405232
+updatedAt: 2026-10-08T17:31:36.732675
+workspaceId: wk_J5K7834vTe
+folderId: fl_XkNjGBUAiU
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: ''
+headers: []
+method: GET
+name: Verify
+sortPriority: 111.1121111111111
+url: ${[ API_BASE_URL_V1 ]}/auth/verify
+urlParameters:
+- enabled: true
+  name: v
+  value: 7538dbb3702e7037cc40107eeeaa8c9bec1835142b61ba73e9107920938a88cd
+  id: IDKJTdBKWr
+- enabled: true
+  name: ''
+  value: ''
+  id: mTs23tyZsb
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingHttpVersion:
+  enabled: false
+  value: auto

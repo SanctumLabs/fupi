@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/identifier"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/identifier"
 )
 
 // MaxKeywords is the maximum number of keywords a URL may carry

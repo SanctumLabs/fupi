@@ -1,0 +1,7 @@
+# Bind the monitoring API to every interface so the exporter and the healthcheck can reach it (Logstash 9 name).
+api.http.host: "0.0.0.0"
+pipeline.ecs_compatibility: v8
+# Survive a Logstash restart without losing buffered events; failed events go to the dead-letter queue.
+queue.type: persisted
+queue.max_bytes: 512mb
+dead_letter_queue.enable: true

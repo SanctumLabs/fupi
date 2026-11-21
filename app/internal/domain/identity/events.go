@@ -3,7 +3,7 @@ package identity
 import (
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
 )
 
 // baseEvent carries the fields every Identity domain event shares and satisfies entity.DomainEvent

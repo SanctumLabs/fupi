@@ -5,13 +5,15 @@ import (
 	"log/slog"
 	"time"
 
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/url"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/url"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 )
 
-func MapUrlModelToEntity(urlModel postgresql.Url) (url.URL, error) {
+// MapUrlModelToEntity maps a url row and the values of its keywords onto a URL entity. The keywords live in their own
+// table, so the caller loads them; a URL mapped without them would lose them on its next Update.
+func MapUrlModelToEntity(urlModel postgresql.Url, keywords []string) (url.URL, error) {
 	urlId, urlIdErr := postgres.UUIDToString(urlModel.ID)
 	if urlIdErr != nil {
 		return url.URL{}, fmt.Errorf("failed to parse id when mapping url %v with error %w", urlModel.ID, urlIdErr)
@@ -66,6 +68,7 @@ func MapUrlModelToEntity(urlModel postgresql.Url) (url.URL, error) {
 		OgTitle:       urlModel.OgTitle.String,
 		OgDescription: urlModel.OgDescription.String,
 		OgImageUrl:    urlModel.OgImageUrl.String,
+		Keywords:      keywords,
 	}
 
 	urlEntity, urlEntityErr := url.NewUrl(urlParams)

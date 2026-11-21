@@ -1,6 +1,6 @@
 package inmemqueue
 
-import "github.com/sanctumlabs/curtz/app/pkg/infra/queue"
+import "github.com/sanctumlabs/fupi/app/pkg/infra/queue"
 
 // publishers
 type InMemQueueMessagePublisher interface {

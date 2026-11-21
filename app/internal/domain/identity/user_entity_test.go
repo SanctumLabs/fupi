@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 func validRegisterParams() RegisterUserParams {
@@ -14,7 +14,7 @@ func validRegisterParams() RegisterUserParams {
 		Username:     "johndoe",
 		FirstName:    "John",
 		LastName:     "Doe",
-		Email:        "john.doe@curtz.com",
+		Email:        "john.doe@fupi.com",
 		PasswordHash: "hashed-password",
 	}
 }
@@ -123,8 +123,8 @@ func TestRegister(t *testing.T) {
 		if registered.VerificationToken != verification.Token() {
 			t.Error("event must carry the same verification token as the aggregate")
 		}
-		if registered.Email != "john.doe@curtz.com" {
-			t.Errorf("event Email = %s, want john.doe@curtz.com", registered.Email)
+		if registered.Email != "john.doe@fupi.com" {
+			t.Errorf("event Email = %s, want john.doe@fupi.com", registered.Email)
 		}
 	})
 
@@ -237,7 +237,7 @@ func TestUser_Verify(t *testing.T) {
 			Username:  "nobody",
 			FirstName: "No",
 			LastName:  "Body",
-			Email:     "nobody@curtz.com",
+			Email:     "nobody@fupi.com",
 			Status:    UserStatusInactive,
 		})
 		if err != nil {
@@ -291,14 +291,14 @@ func TestUser_WithHelpersDoNotMutateReceiver(t *testing.T) {
 		user := mustRegister(t)
 		original := user.Email()
 
-		updated, err := NewEmail("new.address@curtz.com")
+		updated, err := NewEmail("new.address@fupi.com")
 		if err != nil {
 			t.Fatalf("NewEmail: %v", err)
 		}
 
 		copied := user.WithEmail(updated)
 
-		if got := copied.Email(); got.Value() != "new.address@curtz.com" {
+		if got := copied.Email(); got.Value() != "new.address@fupi.com" {
 			t.Errorf("copy email = %s, want the updated address", got.Value())
 		}
 		if got := user.Email(); got.Value() != original.Value() {

@@ -1,0 +1,61 @@
+# The outbox relay worker (see docs/LocalInfrastructure.md). One service per mode; both run /app/worker from the repository image.
+#   worker-ha     KAFKA_BROKERS lists the three brokers.
+#   worker-single KAFKA_BROKERS is the single broker (it answers to the alias kafka-1).
+# The services declare no depends_on: a dependency in a profile that is not enabled makes `docker compose config` fail, so
+# scripts/infra.sh brings up and waits for Postgres and Kafka first, and restart: unless-stopped covers a manual start.
+# The environment is an explicit list, not env_file: the worker must not see the other stacks' admin passwords.
+x-worker: &worker
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  image: fupi-app:local
+  # the image's own entrypoint is the API; the worker is another binary of the same image
+  entrypoint: ["/app/worker"]
+  restart: unless-stopped
+  # longer than SHUTDOWN_TIMEOUT (15s) plus the 5s telemetry flush, so a stop never kills a batch in flight or the final export
+  stop_grace_period: 25s
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  ports: ["127.0.0.1:8086:8086"]
+  # the image's HEALTHCHECK probes the API's port; the worker's liveness is its own subcommand
+  healthcheck:
+    test: ["CMD", "/app/worker", "healthcheck"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 20s
+  networks:
+    fupi:
+      aliases: [fupi-worker]
+
+x-worker-env: &worker-env
+  ENVIRONMENT: development
+  WORKER_HTTP_PORT: "8086"
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ${PG_DATABASE:-fupidb}
+  DATABASE_USERNAME: ${PG_APP_USER:-fupi-user}
+  DATABASE_PASSWORD: ${PG_APP_PASSWORD:-fupi-pass}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_SERVICE_NAME: fupi-worker
+
+services:
+  worker-ha:
+    <<: *worker
+    profiles: [worker-ha]
+    environment:
+      <<: *worker-env
+      KAFKA_BROKERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+
+  worker-single:
+    <<: *worker
+    profiles: [worker-single]
+    environment:
+      <<: *worker-env
+      KAFKA_BROKERS: kafka-1:9092
+
+networks:
+  fupi:
+    name: fupi

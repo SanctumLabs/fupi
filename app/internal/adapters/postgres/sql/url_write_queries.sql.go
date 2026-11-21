@@ -121,28 +121,54 @@ func (q *Queries) QueryDeleteUrlWithId(ctx context.Context, id pgtype.UUID) (Url
 	return i, err
 }
 
-const querySoftDeleteUrl = `-- name: QuerySoftDeleteUrl :one
+const queryNextShortCodeBlock = `-- name: QueryNextShortCodeBlock :one
+SELECT nextval('short_code_counter')::bigint AS block_start
+`
+
+// Claims the next block of short code counter values. short_code_counter increments by the block
+// size, so the caller owns [value, value + block size).
+//
+//	SELECT nextval('short_code_counter')::bigint AS block_start
+func (q *Queries) QueryNextShortCodeBlock(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, queryNextShortCodeBlock)
+	var block_start int64
+	err := row.Scan(&block_start)
+	return block_start, err
+}
+
+const queryUpdateUrl = `-- name: QueryUpdateUrl :one
 UPDATE urls
 SET
-  deleted_at = $2,
+  status = $1::url_status,
+  expires_on = $2,
+  deleted_at = CASE WHEN $1::url_status = 'DELETED' THEN COALESCE(deleted_at, NOW()) END,
   updated_at = NOW()
-WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
+WHERE id = $3
+  AND ($4::timestamptz IS NULL OR updated_at = $4::timestamptz) RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
 `
 
-type QuerySoftDeleteUrlParams struct {
-	ID        pgtype.UUID        `db:"id" json:"id"`
-	DeletedAt pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
+type QueryUpdateUrlParams struct {
+	Status            UrlStatus          `db:"status" json:"status"`
+	ExpiresOn         pgtype.Timestamptz `db:"expires_on" json:"expires_on"`
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	ExpectedUpdatedAt pgtype.Timestamptz `db:"expected_updated_at" json:"expected_updated_at"`
 }
 
-// QuerySoftDeleteUrl
+// Persists the state the URL aggregate owns after a transition. deleted_at follows the status, so
+// the DELETED transition releases the target for reuse (idx_urls_original_url is partial on
+// deleted_at IS NULL) and no other status can leave a stale deleted_at behind. When expected_updated_at is set the
+// update applies only if the row still has that updated_at (optimistic concurrency); no row comes back otherwise.
 //
 //	UPDATE urls
 //	SET
-//	  deleted_at = $2,
+//	  status = $1::url_status,
+//	  expires_on = $2,
+//	  deleted_at = CASE WHEN $1::url_status = 'DELETED' THEN COALESCE(deleted_at, NOW()) END,
 //	  updated_at = NOW()
-//	WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
-func (q *Queries) QuerySoftDeleteUrl(ctx context.Context, arg QuerySoftDeleteUrlParams) (Url, error) {
-	row := q.db.QueryRow(ctx, querySoftDeleteUrl, arg.ID, arg.DeletedAt)
+//	WHERE id = $3
+//	  AND ($4::timestamptz IS NULL OR updated_at = $4::timestamptz) RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
+func (q *Queries) QueryUpdateUrl(ctx context.Context, arg QueryUpdateUrlParams) (Url, error) {
+	row := q.db.QueryRow(ctx, queryUpdateUrl, arg.Status, arg.ExpiresOn, arg.ID, arg.ExpectedUpdatedAt)
 	var i Url
 	err := row.Scan(
 		&i.ID,
@@ -163,96 +189,16 @@ func (q *Queries) QuerySoftDeleteUrl(ctx context.Context, arg QuerySoftDeleteUrl
 	return i, err
 }
 
-const queryUpdateUrlExpiresOn = `-- name: QueryUpdateUrlExpiresOn :one
-UPDATE urls SET expires_on=$2, updated_at=NOW() WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
+const queryUrlByIdForUpdate = `-- name: QueryUrlByIdForUpdate :one
+SELECT id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at FROM urls WHERE id = $1 FOR UPDATE
 `
 
-type QueryUpdateUrlExpiresOnParams struct {
-	ID        pgtype.UUID        `db:"id" json:"id"`
-	ExpiresOn pgtype.Timestamptz `db:"expires_on" json:"expires_on"`
-}
-
-// QueryUpdateUrlExpiresOn
+// Loads a url and locks its row until the transaction ends, so two writers deciding on its state (two deletes) are
+// serialized and only one records the transition.
 //
-//	UPDATE urls SET expires_on=$2, updated_at=NOW() WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
-func (q *Queries) QueryUpdateUrlExpiresOn(ctx context.Context, arg QueryUpdateUrlExpiresOnParams) (Url, error) {
-	row := q.db.QueryRow(ctx, queryUpdateUrlExpiresOn, arg.ID, arg.ExpiresOn)
-	var i Url
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.ShortCode,
-		&i.CustomAlias,
-		&i.OriginalUrl,
-		&i.Status,
-		&i.ExpiresOn,
-		&i.OgTitle,
-		&i.OgDescription,
-		&i.OgImageUrl,
-		&i.Metadata,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
-}
-
-const queryUpdateUrlMetadata = `-- name: QueryUpdateUrlMetadata :one
-UPDATE urls SET metadata=$2, updated_at=NOW() WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
-`
-
-type QueryUpdateUrlMetadataParams struct {
-	ID       pgtype.UUID `db:"id" json:"id"`
-	Metadata []byte      `db:"metadata" json:"metadata"`
-}
-
-// QueryUpdateUrlMetadata
-//
-//	UPDATE urls SET metadata=$2, updated_at=NOW() WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
-func (q *Queries) QueryUpdateUrlMetadata(ctx context.Context, arg QueryUpdateUrlMetadataParams) (Url, error) {
-	row := q.db.QueryRow(ctx, queryUpdateUrlMetadata, arg.ID, arg.Metadata)
-	var i Url
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.ShortCode,
-		&i.CustomAlias,
-		&i.OriginalUrl,
-		&i.Status,
-		&i.ExpiresOn,
-		&i.OgTitle,
-		&i.OgDescription,
-		&i.OgImageUrl,
-		&i.Metadata,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
-}
-
-const queryUpdateUrlStatus = `-- name: QueryUpdateUrlStatus :one
-UPDATE urls
-SET
-  status=$2,
-  updated_at=NOW()
-WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
-`
-
-type QueryUpdateUrlStatusParams struct {
-	ID     pgtype.UUID `db:"id" json:"id"`
-	Status UrlStatus   `db:"status" json:"status"`
-}
-
-// QueryUpdateUrlStatus
-//
-//	UPDATE urls
-//	SET
-//	  status=$2,
-//	  updated_at=NOW()
-//	WHERE id = $1 RETURNING id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at
-func (q *Queries) QueryUpdateUrlStatus(ctx context.Context, arg QueryUpdateUrlStatusParams) (Url, error) {
-	row := q.db.QueryRow(ctx, queryUpdateUrlStatus, arg.ID, arg.Status)
+//	SELECT id, user_id, short_code, custom_alias, original_url, status, expires_on, og_title, og_description, og_image_url, metadata, created_at, updated_at, deleted_at FROM urls WHERE id = $1 FOR UPDATE
+func (q *Queries) QueryUrlByIdForUpdate(ctx context.Context, id pgtype.UUID) (Url, error) {
+	row := q.db.QueryRow(ctx, queryUrlByIdForUpdate, id)
 	var i Url
 	err := row.Scan(
 		&i.ID,

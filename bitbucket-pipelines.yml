@@ -1,38 +1,115 @@
 # ref https://support.atlassian.com/bitbucket-cloud/docs/configure-bitbucket-pipelinesyml/
-image: golang:1.18
+# Bitbucket Pipelines: the same verification as the GitHub workflows (lint, tests, build, image checks);
+# scripts/mirror_ci_check.sh keeps the two in step. Publishing, releases, deploys, Sentry, Slack, CodeQL and Danger stay on
+# GitHub, which also mirrors this repository here (.github/workflows/bitbucket_sync.yml).
+image: golang:1.26
 
-pipelines:
-  default:
-    - step:
-        name: Run linting
+definitions:
+  caches:
+    gomod: /go/pkg/mod
+  services:
+    docker:
+      memory: 3072
+  steps:
+    - step: &lint
+        name: Lint
+        image: golangci/golangci-lint:v2.13.2
+        caches:
+          - gomod
         script:
-          - make setup-linting
-          - make lint
+          - golangci-lint run -v
 
-    - step:
-        name: Run Tests
+    - step: &unit-tests
+        name: Unit tests
+        caches:
+          - gomod
         script:
-          - make test
+          - make test.coverage
+          - go tool cover -func=coverage.out | tail -1
+        artifacts:
+          - coverage.out
 
-    - step:
-        name: Run Build
+    # The integration and e2e tests start their own containers (testcontainers) on the Docker service. Ryuk is off because
+    # the daemon is thrown away with the step.
+    - step: &integration-tests
+        name: Integration tests
+        size: 2x
+        caches:
+          - gomod
+        services:
+          - docker
+        script:
+          - export TESTCONTAINERS_RYUK_DISABLED=true
+          - make test.integration
+
+    - step: &e2e-tests
+        name: E2E tests
+        size: 2x
+        caches:
+          - gomod
+        services:
+          - docker
+        script:
+          - export TESTCONTAINERS_RYUK_DISABLED=true
+          - make test.e2e
+
+    - step: &openapi
+        name: OpenAPI spec is up to date
+        caches:
+          - gomod
+        script:
+          - make check.open.api.docs
+
+    - step: &build
+        name: Build
+        caches:
+          - gomod
         script:
           - make build
+        artifacts:
+          - bin/fupi
 
-  branches:
-    main:
-      - step:
-          name: Run linting
-          script:
-            - make setup-linting
-            - make lint
+    - step: &docker-lint
+        name: Lint the Dockerfile
+        image: hadolint/hadolint:v2.15.1-debian
+        script:
+          - hadolint --config hadolint.yaml Dockerfile
 
-      - step:
-          name: Run Tests
-          script:
-            - make test
+    - step: &docker-build
+        name: Build and check the image
+        size: 2x
+        services:
+          - docker
+        script:
+          - export IMAGE_TAG=fupi-service:ci
+          # the docker service builds with the classic builder unless BuildKit is on, and the Dockerfile uses RUN --mount
+          - export DOCKER_BUILDKIT=1
+          - docker build -t "$IMAGE_TAG" --build-arg VERSION="$(echo "$BITBUCKET_COMMIT" | cut -c1-7)" --build-arg GIT_COMMIT="$BITBUCKET_COMMIT" --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+          - scripts/image_test.sh image "$IMAGE_TAG"
+          - docker save -o fupi-image.tar "$IMAGE_TAG"
+        artifacts:
+          - fupi-image.tar
 
-      - step:
-          name: Run Build
-          script:
-            - make build
+    # The image is scanned from the saved tar, so the scanner needs no Docker daemon and no shared paths.
+    - step: &docker-scan
+        name: Scan the image
+        image: aquasec/trivy:0.75.0
+        script:
+          - trivy image --quiet --no-progress --input fupi-image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+
+pipelines:
+  default: &verify
+    - step: *lint
+    - parallel:
+        - step: *unit-tests
+        - step: *integration-tests
+        - step: *e2e-tests
+        - step: *openapi
+    - step: *build
+    - parallel:
+        - step: *docker-lint
+        - step: *docker-build
+    - step: *docker-scan
+
+  pull-requests:
+    '**': *verify

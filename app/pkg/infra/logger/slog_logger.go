@@ -10,7 +10,7 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"github.com/sanctumlabs/curtz/app/pkg/infra/tracing"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/tracing"
 )
 
 const (

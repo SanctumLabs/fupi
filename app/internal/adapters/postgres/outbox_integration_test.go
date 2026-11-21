@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	postgresrepo "github.com/sanctumlabs/curtz/app/internal/adapters/postgres"
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
-	"github.com/sanctumlabs/curtz/app/test"
+	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
+	"github.com/sanctumlabs/fupi/app/test"
 	"github.com/stretchr/testify/require"
 )
 

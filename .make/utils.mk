@@ -31,6 +31,10 @@ wire: # Generate dependency injection instances with wire
 	cd internal/app && wire
 	@echo "${GREEN} Done generating dependency injection instances ${NC}"
 
+.PHONY: setup.actionlint
+setup.actionlint: ## Will setup actionlint for linting GitHub Actions workflows
+	@echo "${GREEN} Setting up actionlint ${NC}"
+	go install github.com/rhysd/actionlint/cmd/actionlint@latest
 
 ################################################## Protobuf Commands ########################################################
 
@@ -42,7 +46,7 @@ buf.generate: ## Generates code from protobuf files
 
 BUF_CLIENTS_TEMPLATE ?= buf.gen.infra.yaml
 .PHONY: buf.generate.clients
-buf.generate.clients: ## Generates gRPC client code from protobuf files for external gRPC services, defaults to buf.gen.infra.yaml template. Usage: make bufGenerateClients BUF_CLIENTS_TEMPLATE=path/to/buf.gen.infra.yaml
+buf.generate.clients: ## Generates gRPC client code from protobuf files for external gRPC services, defaults to buf.gen.infra.yaml template. Usage make bufGenerateClients BUF_CLIENTS_TEMPLATE=path/to/buf.gen.infra.yaml
 	@echo "${GREEN} Generating gRPC Client APIs For external services ${NC}"
 	buf generate --template $(BUF_CLIENTS_TEMPLATE)
 	@echo "${GREEN} Done generating gRPC client APIs for external services ${NC}" 
@@ -53,8 +57,16 @@ buf.dep.update: ## Update Buf dependencies
 	buf dep update
 	@echo ${GREEN} "Done updating Buf dependencies ${NC}" 
 
+SWAG ?= go run github.com/swaggo/swag/cmd/swag@v1.16.4
+OPENAPI_DIR ?= app/api/openapi
+
 .PHONY: generate.open.api.docs
-generate.open.api.docs: ## Generate OpenApi Docs
+generate.open.api.docs: ## Generate the OpenAPI spec (Swagger 2.0) from the handler annotations into app/api/openapi, which the server embeds
 	@echo "${GREEN} Generating Open API Docs ${NC}"
-	swag init --generalInfo main.go --dir cmd,api/rest/routes/service/v1/curtz,api/rest/routes/monitoring/health --output api/openapi-spec
+	$(SWAG) init --generalInfo main.go --dir app/cmd,app/api --parseDependency --output $(OPENAPI_DIR) --outputTypes json
 	@echo "${GREEN} Done Generating Open API Docs ${NC}"
+
+.PHONY: check.open.api.docs
+check.open.api.docs: generate.open.api.docs ## Fails when the committed OpenAPI spec differs from what the handler annotations generate
+	git diff --exit-code -- $(OPENAPI_DIR)
+	@test -z "$$(git ls-files --others --exclude-standard -- $(OPENAPI_DIR))" || { echo "untracked OpenAPI files, run make generate.open.api.docs and commit"; exit 1; }

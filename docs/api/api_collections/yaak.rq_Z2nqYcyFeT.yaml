@@ -1,0 +1,48 @@
+type: http_request
+model: http_request
+id: rq_Z2nqYcyFeT
+createdAt: 2026-10-08T16:44:46.555774
+updatedAt: 2026-10-08T17:11:49.196896
+workspaceId: wk_J5K7834vTe
+folderId: fl_XkNjGBUAiU
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "username": "janedoe",
+      "first_name": "Jane",
+      "last_name": "Doe",
+      "password": "Pas%word134",
+      "email": "janedoe@example.com"
+    }
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: pDFW3FHFHM
+method: POST
+name: Register
+sortPriority: 111.1111111111111
+url: ${[ API_BASE_URL_V1 ]}/auth/register
+urlParameters: []
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingHttpVersion:
+  enabled: false
+  value: auto

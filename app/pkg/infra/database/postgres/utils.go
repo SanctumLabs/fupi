@@ -4,26 +4,40 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
 )
 
-func buildConnectionString(config PostgresDatabaseConfig) string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?pool_max_conns=%d&pool_min_conns=%d",
-		config.Username,
-		config.Password,
-		config.Host,
-		config.Port,
-		config.Name,
-		config.MaxConns,
-		config.MinConns,
-	)
+// ConnectionString returns the DSN for a database config. DATABASE_URL (Url) wins when set; otherwise the DSN is
+// built from the parts with the credentials escaped, so a password containing @ / : ? # or % cannot corrupt it.
+func ConnectionString(config PostgresDatabaseConfig) string {
+	if config.Url != "" {
+		return config.Url
+	}
+
+	query := url.Values{}
+	if config.SslMode != "" {
+		query.Set("sslmode", config.SslMode)
+	}
+	query.Set("pool_max_conns", strconv.Itoa(int(config.MaxConns)))
+	query.Set("pool_min_conns", strconv.Itoa(int(config.MinConns)))
+
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(config.Username, config.Password),
+		Host:     net.JoinHostPort(config.Host, config.Port),
+		Path:     "/" + config.Name,
+		RawQuery: query.Encode(),
+	}
+	return dsn.String()
 }
 
 // WithTransactionRetry wraps a transaction with retry logic
@@ -40,7 +54,7 @@ func WithTransactionRetry[T any](
 			var result T
 			return result, fmt.Errorf("failed to begin transaction: %w", err)
 		}
-		defer tx.Rollback(ctx) // This is safe even if commit succeeds
+		defer func() { _ = tx.Rollback(ctx) }() // This is safe even if commit succeeds
 
 		result, err := operation(tx)
 		if err != nil {

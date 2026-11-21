@@ -11,8 +11,9 @@ package mockinmemqueue
 
 import (
 	context "context"
-	queue "github.com/sanctumlabs/curtz/app/pkg/infra/queue"
 	reflect "reflect"
+
+	queue "github.com/sanctumlabs/fupi/app/pkg/infra/queue"
 
 	gomock "go.uber.org/mock/gomock"
 )

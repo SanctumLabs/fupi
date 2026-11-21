@@ -3,7 +3,7 @@ package database
 import (
 	"time"
 
-	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
 )
 
 // DefaultOperationTimeout is used when Config.OperationTimeout is not set, so a zero-value config

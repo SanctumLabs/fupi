@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-ozzo/ozzo-validation/is"
 	"github.com/go-playground/validator/v10"
-	"github.com/sanctumlabs/curtz/app/pkg"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 
 	validation "github.com/go-ozzo/ozzo-validation"
 )

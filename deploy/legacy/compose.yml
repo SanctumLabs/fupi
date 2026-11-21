@@ -1,0 +1,40 @@
+# Legacy stack: MongoDB and the standalone Redis used by the code behind the `legacy` build tag.
+# Kept as it was while the code base moves to Postgres (MongoDB 4.4 is end-of-life). Start with: make infra.legacy.up
+services:
+  documentdb:
+    image: mongo:4.4.14
+    container_name: fupi-documentdb
+    hostname: documentdb
+    profiles: [legacy]
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: fupiUser
+      MONGO_INITDB_ROOT_PASSWORD: fupiPassword
+      MONGO_INITDB_DATABASE: fupidb
+      MONGO_INITDB_USER: fupiUser
+      MONGO_INITDB_PASSWORD: fupiPassword
+    volumes:
+      - docdb:/data/db
+    networks:
+      - fupi
+
+  cache:
+    image: redis:7.0.2
+    container_name: fupi-cache
+    hostname: cache
+    profiles: [legacy]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - cache:/data
+    networks:
+      - fupi
+
+volumes:
+  docdb:
+  cache:
+
+networks:
+  fupi:
+    name: fupi

@@ -69,7 +69,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ### Issue tracker
 
-Issues live in the `SanctumLabs/curtz` GitHub Issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in the `SanctumLabs/fupi` GitHub Issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

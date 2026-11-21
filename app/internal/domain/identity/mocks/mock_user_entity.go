@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/go-faker/faker/v4"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	timeutils "github.com/sanctumlabs/curtz/app/pkg/utils/time"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	timeutils "github.com/sanctumlabs/fupi/app/pkg/utils/time"
 )
 
 type MockUserOption func(*identity.UserParams)

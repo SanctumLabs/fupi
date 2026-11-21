@@ -1,0 +1,53 @@
+type: http_request
+model: http_request
+id: rq_2AAahtqzia
+createdAt: 2026-10-08T17:31:14.382187
+updatedAt: 2026-10-08T17:31:54.515405
+workspaceId: wk_J5K7834vTe
+folderId: fl_XkNjGBUAiU
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "password": "Pas%word134",
+      "email": "janedoe@example.com"
+    }
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: pDFW3FHFHM
+method: POST
+name: Login
+sortPriority: 111.11311111111112
+url: ${[ API_BASE_URL_V1 ]}/auth/login
+urlParameters:
+- enabled: true
+  name: ''
+  value: ''
+  id: IDKJTdBKWr
+- enabled: true
+  name: ''
+  value: ''
+  id: RqP3MR2zAc
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingHttpVersion:
+  enabled: false
+  value: auto

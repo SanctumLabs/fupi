@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 type (
@@ -37,6 +37,10 @@ type (
 		ogTitle       string
 		ogDescription string
 		ogImageUrl    string
+
+		// loadedUpdatedAt is the updated time the url was hydrated with; zero for a url that is not stored yet. A
+		// datastore uses it as the version to guard an update with, because updatedAt moves on with every change.
+		loadedUpdatedAt time.Time
 	}
 
 	// URLParams represents the parameters for creating or updating a url
@@ -129,6 +133,8 @@ func NewUrl(params URLParams) (*URL, error) {
 		ogTitle:       params.OgTitle,
 		ogDescription: params.OgDescription,
 		ogImageUrl:    params.OgImageUrl,
+
+		loadedUpdatedAt: aggregateRoot.UpdatedAt(),
 	}, nil
 }
 
@@ -136,6 +142,16 @@ func NewUrl(params URLParams) (*URL, error) {
 func Create(params CreateURLParams) (*URL, error) {
 	if !params.ExpiresOn.After(time.Now()) {
 		return nil, fmt.Errorf("%w: '%s'", errdefs.ErrPastExpiration, params.ExpiresOn)
+	}
+
+	// Short codes and custom aliases share one redirect namespace but are unique only within their own column, so a new
+	// alias must not have a shape a short code can have: one that did could equal a code generated later, and the code
+	// would win the lookup (ADR-0020). The rule is checked here, not in NewCustomAlias, so aliases stored before it
+	// still load.
+	if params.CustomAlias != "" {
+		if _, shortCodeErr := NewShortCode(params.CustomAlias); shortCodeErr == nil {
+			return nil, fmt.Errorf("%w: '%s'", errdefs.ErrCustomAliasLikeShortCode, params.CustomAlias)
+		}
 	}
 
 	now := time.Now()
@@ -165,6 +181,7 @@ func Create(params CreateURLParams) (*URL, error) {
 		return nil, err
 	}
 
+	url.loadedUpdatedAt = time.Time{} // nothing is stored yet, so there is no version to guard an update with
 	url.ApplyDomain(URLCreated{
 		baseEvent:   newBaseEvent("url.created"),
 		URLID:       entity.IDToString(url.ID()),
@@ -179,13 +196,7 @@ func Create(params CreateURLParams) (*URL, error) {
 
 // Redirect returns the original url to redirect to. Only an ACTIVE, unexpired url redirects.
 func (url *URL) Redirect() (OriginalURL, error) {
-	if url.status != URLStatusActive {
-		return OriginalURL{}, errdefs.ErrURLNotActive
-	}
-	if !url.expiresOn.After(time.Now()) {
-		return OriginalURL{}, errdefs.ErrURLExpired
-	}
-	return url.originalUrl, nil
+	return RedirectTarget{originalUrl: url.originalUrl, status: url.status, expiresOn: url.expiresOn}.Redirect()
 }
 
 // MarkExpired transitions ACTIVE → EXPIRED and records URLExpired.
@@ -240,6 +251,16 @@ func (url *URL) MarkDeleted() error {
 	return nil
 }
 
+// Purge records URLPurged for a url that is about to be removed for good, whatever its status. It changes nothing on the
+// aggregate: removing the row is the datastore's job, in the same transaction as the event.
+func (url *URL) Purge() {
+	url.ApplyDomain(URLPurged{
+		baseEvent: newBaseEvent("url.purged"),
+		URLID:     entity.IDToString(url.ID()),
+		ShortCode: url.shortCode.Value(),
+	})
+}
+
 // UpdateExpiry sets a new expiry on an ACTIVE url. The new expiry must be in the future.
 func (url *URL) UpdateExpiry(expiresOn time.Time) error {
 	if url.status != URLStatusActive {
@@ -291,7 +312,13 @@ func (url *URL) transition(to URLStatus, from ...URLStatus) error {
 }
 
 func (url *URL) touch() {
-	url.EntityTimestamp = url.EntityTimestamp.WithUpdatedAt(time.Now())
+	url.EntityTimestamp = url.WithUpdatedAt(time.Now())
+}
+
+// LoadedUpdatedAt is the updated time the url was loaded with: the version an update is guarded with, so a writer that
+// worked from a stale copy does not overwrite a newer change. Zero for a url that was never stored.
+func (url *URL) LoadedUpdatedAt() time.Time {
+	return url.loadedUpdatedAt
 }
 
 func (url *URL) UserId() entity.ID {

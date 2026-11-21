@@ -1,13 +1,11 @@
-# Curtz
+# Fupi
 
-[![License](https://img.shields.io/github/license/sanctumlabs/curtz)](https://github.com/sanctumlabs/curtz/blob/main/LICENSE)
-[![Version](https://img.shields.io/github/v/release/sanctumlabs/curtz?color=%235351FB&label=version)](https://github.com/sanctumlabs/curtz/releases)
-[![Tests](https://github.com/sanctumlabs/curtz/actions/workflows/tests.yml/badge.svg)](https://github.com/sanctumlabs/curtz/actions/workflows/tests.yml)
-[![Lint](https://github.com/sanctumlabs/curtz/actions/workflows/lint.yml/badge.svg)](https://github.com/sanctumlabs/curtz/actions/workflows/lint.yml)
-[![Build](https://github.com/sanctumlabs/curtz/actions/workflows/build_app.yml/badge.svg)](https://github.com/sanctumlabs/curtz/actions/workflows/build_app.yml)
-[![codecov](https://codecov.io/gh/sanctumlabs/curtz/branch/develop/graph/badge.svg?token=RNg0UoESug)](https://codecov.io/gh/sanctumlabs/curtz)
-[![Go](https://img.shields.io/badge/Go-1.18-blue.svg)](https://go.dev/)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/be035defd2d44675bddf744a88d1a2d5)](https://www.codacy.com/gh/SanctumLabs/curtz/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=SanctumLabs/curtz&amp;utm_campaign=Badge_Grade)
+[![License](https://img.shields.io/github/license/sanctumlabs/fupi)](https://github.com/sanctumlabs/fupi/blob/main/LICENSE)
+[![Version](https://img.shields.io/github/v/release/sanctumlabs/fupi?color=%235351FB&label=version)](https://github.com/sanctumlabs/fupi/releases)
+[![CI](https://github.com/sanctumlabs/fupi/actions/workflows/ci.yml/badge.svg)](https://github.com/sanctumlabs/fupi/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sanctumlabs/fupi/branch/develop/graph/badge.svg?token=RNg0UoESug)](https://codecov.io/gh/sanctumlabs/fupi)
+[![Go](https://img.shields.io/badge/Go-1.26.0-blue.svg)](https://go.dev/)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/be035defd2d44675bddf744a88d1a2d5)](https://www.codacy.com/gh/SanctumLabs/fupi/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=SanctumLabs/fupi&amp;utm_campaign=Badge_Grade)
 
 Simple URL Shortner Service
 
@@ -15,13 +13,13 @@ Simple URL Shortner Service
 
 Ensure you have the following setup on you local development environment:
 
-### [Go 1.25](https://go.dev/)
+### [Go 1.26](https://go.dev/)
 
 This is the programming language used to build the application. You will require this installed in order to install dependencies and run the application.
 
 ### [Docker](https://www.docker.com/)
 
-The application is packaged & run in a Docker container, although it can be run without Docker, it uses services that can be run in Docker as specified in the [docker-compose.yml file](./docker-compose.yml). If you want to run supporting services such as [MongoDB](https://www.mongodb.com/) & [Redis](https://redis.io/) in docker containers, then you will require docker setup. If not, you can install these services locally on your development machine.
+The application is packaged & run in a Docker container. The services it depends on (Postgres, Redis, Kafka, ELK, Prometheus and Grafana) run locally in Docker too, either as high-availability clusters or as single nodes, as described in [Local infrastructure](./docs/LocalInfrastructure.md). If you prefer, you can install these services directly on your development machine instead. The API itself is built into a hardened image (`make build.docker`) and can run beside those services with `make infra.app.up`; see [Deployment](./docs/Deployment.md).
 
 ## Running the application
 
@@ -35,25 +33,23 @@ go mod download
 
 > Either option will work to setup the dependencies
 
-Second, setup the environmant variables that the application will use. There are some defaults set up in [.env.sample](./.env.sample) and they can be used to setup the environment variables specific to how you want the application to run.
+Second, setup the environmant variables that the application will use. There are some defaults set up in [.env.example](./.env.example) and they can be used to setup the environment variables specific to how you want the application to run.
 
 ```bash
-cp .env.sample .env
+cp .env.example .env
 ```
 
 > This will copy over those environment variables. Afterwards, you can set them up accordingly.
 
-Next step is to run the services the application needs to communicate with; The database & the cache.
-
-If you have installed these locally, you can run them in separate terminal sessions. If not, you can use Docker to do so(preferred option).
+Next step is to run the services the application needs to communicate with: Postgres, Redis and Kafka. If you have installed these locally, you can run them in separate terminal sessions. If not, use Docker (preferred); the lightest option is single-node mode:
 
 ```bash
-docker compose up
-# You can optionally attach -d flag to the command like below
-docker compose up -d
+make infra.core.up MODE=single
+# or the high-availability topology
+make infra.core.up
 ```
 
-> This will run the services in docker containers, pulling the images and building the containers for use. Using the `-d` flag runs the services in the background.
+> Nothing starts without a profile, so a bare `docker compose up` does nothing. See [Local infrastructure](./docs/LocalInfrastructure.md) for every stack, mode and debugging tip. Stop the services with `make infra.core.down`.
 
 Depending on which terminal session you are using to run the above steps(if all are in the same terminal session), you can continue to run the application as below:
 
@@ -63,7 +59,7 @@ go run app/cmd/main.go
 make run
 ```
 
-> This will boot up the application with the provided environment variables.
+> This will boot up the application with the provided environment variables. Check that it is ready with `curl -s localhost:8085/health/ready`; Postgres is required, Redis is optional. Apply the database migrations from the app's own migrator with `go run ./app/cmd/migrator` (or `make run.with.migrations`). See [Running the app against the stack](./docs/LocalInfrastructure.md#running-the-app-against-the-stack).
 
 ### Live reloading
 
@@ -121,7 +117,7 @@ Architecture can be found [here](./docs/Architecture.md)
 
 ## Versioning
 
-[SemVer](https://semver.org/) is used for versioning. For the versions available, see the [tags](https://github.com/SanctumLabs/curtz/tags) in this repository.
+[SemVer](https://semver.org/) is used for versioning. For the versions available, see the [tags](https://github.com/SanctumLabs/fupi/tags) in this repository.
 
 ## License
 

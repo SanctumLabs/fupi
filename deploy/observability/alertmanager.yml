@@ -1,0 +1,10 @@
+route:
+  receiver: "null"
+  group_by: [alertname]
+  group_wait: 30s
+  repeat_interval: 4h
+
+receivers:
+  # Alerts are only visible in the Alertmanager UI (http://localhost:9093). To be notified, replace this receiver with
+  # a Slack, email or webhook receiver (see docs/LocalInfrastructure.md).
+  - name: "null"

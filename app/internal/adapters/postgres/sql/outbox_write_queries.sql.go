@@ -24,7 +24,7 @@ INSERT INTO
     payload,
     error_message,
     metadata
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 type QueryCreateOutboxEventParams struct {
@@ -54,7 +54,7 @@ type QueryCreateOutboxEventParams struct {
 //	    payload,
 //	    error_message,
 //	    metadata
-//	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QueryCreateOutboxEvent(ctx context.Context, arg QueryCreateOutboxEventParams) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, queryCreateOutboxEvent,
 		arg.ID,
@@ -82,6 +82,8 @@ func (q *Queries) QueryCreateOutboxEvent(ctx context.Context, arg QueryCreateOut
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -90,12 +92,12 @@ func (q *Queries) QueryCreateOutboxEvent(ctx context.Context, arg QueryCreateOut
 }
 
 const queryDeleteOutboxEvent = `-- name: QueryDeleteOutboxEvent :one
-DELETE FROM outbox_events WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+DELETE FROM outbox_events WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 // QueryDeleteOutboxEvent
 //
-//	DELETE FROM outbox_events WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	DELETE FROM outbox_events WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QueryDeleteOutboxEvent(ctx context.Context, id pgtype.UUID) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, queryDeleteOutboxEvent, id)
 	var i OutboxEvent
@@ -112,6 +114,8 @@ func (q *Queries) QueryDeleteOutboxEvent(ctx context.Context, id pgtype.UUID) (O
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -129,7 +133,7 @@ SET
   updated_at = now(),
   deleted_at = now()
 WHERE id = $1 
-RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 // QueryMarkOutboxEventAsPermanentlyFailed
@@ -143,7 +147,7 @@ RETURNING id, group_id, correlation_id, partition_key, destination, event_type, 
 //	  updated_at = now(),
 //	  deleted_at = now()
 //	WHERE id = $1
-//	RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QueryMarkOutboxEventAsPermanentlyFailed(ctx context.Context, id pgtype.UUID) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, queryMarkOutboxEventAsPermanentlyFailed, id)
 	var i OutboxEvent
@@ -160,6 +164,8 @@ func (q *Queries) QueryMarkOutboxEventAsPermanentlyFailed(ctx context.Context, i
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -172,7 +178,7 @@ UPDATE outbox_events
 SET
   sent_time=$2,
   updated_at=now()
-WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 type QueryMarkOutboxEventAsSentParams struct {
@@ -186,7 +192,7 @@ type QueryMarkOutboxEventAsSentParams struct {
 //	SET
 //	  sent_time=$2,
 //	  updated_at=now()
-//	WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QueryMarkOutboxEventAsSent(ctx context.Context, arg QueryMarkOutboxEventAsSentParams) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, queryMarkOutboxEventAsSent, arg.ID, arg.SentTime)
 	var i OutboxEvent
@@ -203,6 +209,8 @@ func (q *Queries) QueryMarkOutboxEventAsSent(ctx context.Context, arg QueryMarkO
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -215,7 +223,7 @@ UPDATE outbox_events
 SET
   deleted_at = $2,
   updated_at=now()
-WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 type QuerySoftDeleteOutboxEventParams struct {
@@ -229,7 +237,7 @@ type QuerySoftDeleteOutboxEventParams struct {
 //	SET
 //	  deleted_at = $2,
 //	  updated_at=now()
-//	WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QuerySoftDeleteOutboxEvent(ctx context.Context, arg QuerySoftDeleteOutboxEventParams) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, querySoftDeleteOutboxEvent, arg.ID, arg.DeletedAt)
 	var i OutboxEvent
@@ -246,6 +254,8 @@ func (q *Queries) QuerySoftDeleteOutboxEvent(ctx context.Context, arg QuerySoftD
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -260,7 +270,7 @@ SET
   sent_time=$3,
   destination=$4,
   updated_at=now()
-WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 type QueryUpdateOutboxEventParams struct {
@@ -278,7 +288,7 @@ type QueryUpdateOutboxEventParams struct {
 //	  sent_time=$3,
 //	  destination=$4,
 //	  updated_at=now()
-//	WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QueryUpdateOutboxEvent(ctx context.Context, arg QueryUpdateOutboxEventParams) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, queryUpdateOutboxEvent,
 		arg.ID,
@@ -300,6 +310,8 @@ func (q *Queries) QueryUpdateOutboxEvent(ctx context.Context, arg QueryUpdateOut
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -312,7 +324,7 @@ UPDATE outbox_events
 SET
   processing_at=$2,
   updated_at=now()
-WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 type QueryUpdateOutboxEventAsProcessingParams struct {
@@ -326,7 +338,7 @@ type QueryUpdateOutboxEventAsProcessingParams struct {
 //	SET
 //	  processing_at=$2,
 //	  updated_at=now()
-//	WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	WHERE id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QueryUpdateOutboxEventAsProcessing(ctx context.Context, arg QueryUpdateOutboxEventAsProcessingParams) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, queryUpdateOutboxEventAsProcessing, arg.ID, arg.ProcessingAt)
 	var i OutboxEvent
@@ -343,6 +355,8 @@ func (q *Queries) QueryUpdateOutboxEventAsProcessing(ctx context.Context, arg Qu
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -355,7 +369,7 @@ UPDATE outbox_events AS oe
 SET
   error_message=$2,
   updated_at=now()
-WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 `
 
 type QueryUpdateOutboxEventErrorParams struct {
@@ -369,7 +383,7 @@ type QueryUpdateOutboxEventErrorParams struct {
 //	SET
 //	  error_message=$2,
 //	  updated_at=now()
-//	WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, created_at, updated_at, deleted_at
+//	WHERE oe.id = $1 RETURNING id, group_id, correlation_id, partition_key, destination, event_type, headers, payload, error_message, metadata, sent_time, processing_at, attempts, parked_at, created_at, updated_at, deleted_at
 func (q *Queries) QueryUpdateOutboxEventError(ctx context.Context, arg QueryUpdateOutboxEventErrorParams) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, queryUpdateOutboxEventError, arg.ID, arg.ErrorMessage)
 	var i OutboxEvent
@@ -386,6 +400,8 @@ func (q *Queries) QueryUpdateOutboxEventError(ctx context.Context, arg QueryUpda
 		&i.Metadata,
 		&i.SentTime,
 		&i.ProcessingAt,
+		&i.Attempts,
+		&i.ParkedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

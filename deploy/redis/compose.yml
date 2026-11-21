@@ -1,0 +1,147 @@
+# Redis Cluster.
+#   HA     redis-1..6: 3 masters x 1 replica, ports 7001..7006.
+#   single redis-single: a cluster of one node owning every slot; answers to the alias redis-1.
+# Nodes announce hostnames (redis-1..redis-6) so cluster clients can follow MOVED redirects; an app on the host needs
+# them in /etc/hosts (make infra.hosts). Nodes have fixed IPs because the cluster bus persists peer addresses.
+x-redis-common: &redis-common
+  image: redis:8.10.2-alpine
+  restart: unless-stopped
+  user: redis
+  entrypoint: ["/bin/sh", "/start.sh"]
+  healthcheck:
+    test: ["CMD-SHELL", "redis-cli -p $$NODE_PORT ping | grep -q PONG"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+
+x-redis-env: &redis-env
+  REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD:-fupi-redis-admin}
+  REDISCLI_AUTH: ${REDIS_ADMIN_PASSWORD:-fupi-redis-admin}
+  REDIS_USERNAME: ${REDIS_USERNAME:-fupi-svc}
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-fupi-svc}
+
+services:
+  redis-1:
+    <<: *redis-common
+    profiles: [redis-ha, core-ha, full-ha]
+    environment: {<<: *redis-env, NODE_PORT: "7001", NODE_HOST: redis-1}
+    ports: ["127.0.0.1:7001:7001"]
+    volumes: ["redis-1-data:/data", "./redis.conf:/usr/local/etc/redis/redis.conf:ro", "./start.sh:/start.sh:ro"]
+    networks:
+      fupi:
+        ipv4_address: ${FUPI_NET_PREFIX:-172.29.0}.11
+
+  redis-2:
+    <<: *redis-common
+    profiles: [redis-ha, core-ha, full-ha]
+    environment: {<<: *redis-env, NODE_PORT: "7002", NODE_HOST: redis-2}
+    ports: ["127.0.0.1:7002:7002"]
+    volumes: ["redis-2-data:/data", "./redis.conf:/usr/local/etc/redis/redis.conf:ro", "./start.sh:/start.sh:ro"]
+    networks:
+      fupi:
+        ipv4_address: ${FUPI_NET_PREFIX:-172.29.0}.12
+
+  redis-3:
+    <<: *redis-common
+    profiles: [redis-ha, core-ha, full-ha]
+    environment: {<<: *redis-env, NODE_PORT: "7003", NODE_HOST: redis-3}
+    ports: ["127.0.0.1:7003:7003"]
+    volumes: ["redis-3-data:/data", "./redis.conf:/usr/local/etc/redis/redis.conf:ro", "./start.sh:/start.sh:ro"]
+    networks:
+      fupi:
+        ipv4_address: ${FUPI_NET_PREFIX:-172.29.0}.13
+
+  redis-4:
+    <<: *redis-common
+    profiles: [redis-ha, core-ha, full-ha]
+    environment: {<<: *redis-env, NODE_PORT: "7004", NODE_HOST: redis-4}
+    ports: ["127.0.0.1:7004:7004"]
+    volumes: ["redis-4-data:/data", "./redis.conf:/usr/local/etc/redis/redis.conf:ro", "./start.sh:/start.sh:ro"]
+    networks:
+      fupi:
+        ipv4_address: ${FUPI_NET_PREFIX:-172.29.0}.14
+
+  redis-5:
+    <<: *redis-common
+    profiles: [redis-ha, core-ha, full-ha]
+    environment: {<<: *redis-env, NODE_PORT: "7005", NODE_HOST: redis-5}
+    ports: ["127.0.0.1:7005:7005"]
+    volumes: ["redis-5-data:/data", "./redis.conf:/usr/local/etc/redis/redis.conf:ro", "./start.sh:/start.sh:ro"]
+    networks:
+      fupi:
+        ipv4_address: ${FUPI_NET_PREFIX:-172.29.0}.15
+
+  redis-6:
+    <<: *redis-common
+    profiles: [redis-ha, core-ha, full-ha]
+    environment: {<<: *redis-env, NODE_PORT: "7006", NODE_HOST: redis-6}
+    ports: ["127.0.0.1:7006:7006"]
+    volumes: ["redis-6-data:/data", "./redis.conf:/usr/local/etc/redis/redis.conf:ro", "./start.sh:/start.sh:ro"]
+    networks:
+      fupi:
+        ipv4_address: ${FUPI_NET_PREFIX:-172.29.0}.16
+
+  redis-single:
+    <<: *redis-common
+    profiles: [redis-single, core-single, full-single]
+    environment: {<<: *redis-env, NODE_PORT: "7001", NODE_HOST: redis-1}
+    ports: ["127.0.0.1:7001:7001"]
+    volumes: ["redis-single-data:/data", "./redis.conf:/usr/local/etc/redis/redis.conf:ro", "./start.sh:/start.sh:ro"]
+    networks:
+      fupi:
+        aliases: [redis-1]
+        ipv4_address: ${FUPI_NET_PREFIX:-172.29.0}.11
+
+  redis-init-ha:
+    image: redis:8.10.2-alpine
+    profiles: [redis-ha, core-ha, full-ha]
+    restart: "no"
+    depends_on:
+      redis-1: {condition: service_healthy}
+      redis-2: {condition: service_healthy}
+      redis-3: {condition: service_healthy}
+      redis-4: {condition: service_healthy}
+      redis-5: {condition: service_healthy}
+      redis-6: {condition: service_healthy}
+    environment:
+      REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD:-fupi-redis-admin}
+      CLUSTER_MODE: ha
+      NET_PREFIX: ${FUPI_NET_PREFIX:-172.29.0}
+    entrypoint: ["/bin/sh", "/init-cluster.sh"]
+    volumes: ["./init-cluster.sh:/init-cluster.sh:ro"]
+    networks: [fupi]
+
+  redis-init-single:
+    image: redis:8.10.2-alpine
+    profiles: [redis-single, core-single, full-single]
+    restart: "no"
+    depends_on:
+      redis-single: {condition: service_healthy}
+    environment: {REDIS_ADMIN_PASSWORD: "${REDIS_ADMIN_PASSWORD:-fupi-redis-admin}", CLUSTER_MODE: single}
+    entrypoint: ["/bin/sh", "/init-cluster.sh"]
+    volumes: ["./init-cluster.sh:/init-cluster.sh:ro"]
+    networks: [fupi]
+
+  # One exporter serves both modes: in cluster mode it discovers the other nodes from redis-1.
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.93.0-alpine
+    profiles: [redis-ha, redis-single, core-ha, core-single, full-ha, full-single]
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis-1:7001
+      REDIS_PASSWORD: ${REDIS_ADMIN_PASSWORD:-fupi-redis-admin}
+      REDIS_EXPORTER_IS_CLUSTER: "true"
+    networks: [fupi]
+
+volumes:
+  redis-1-data:
+  redis-2-data:
+  redis-3-data:
+  redis-4-data:
+  redis-5-data:
+  redis-6-data:
+  redis-single-data:
+
+networks:
+  fupi:
+    name: fupi

@@ -2,12 +2,6 @@ package redis
 
 type Option func(*redisClient)
 
-func WithConnAttempts(attempts int) Option {
-	return func(r *redisClient) {
-		r.connAttempts = attempts
-	}
-}
-
 func StatsEnabled(enabled bool) Option {
 	return func(r *redisClient) {
 		r.statsEnabled = enabled

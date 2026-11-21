@@ -2,15 +2,15 @@ package inmemqueue
 
 import (
 	"context"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/queue"
+
+	"github.com/sanctumlabs/fupi/app/pkg/infra/queue"
 
 	"github.com/google/wire"
 )
 
 type inMemQueueMessageConsumer struct {
-	workerPoolSize int
-	queueName      string
-	inMemQueue     *InMemQueue
+	queueName  string
+	inMemQueue *InMemQueue
 }
 
 var _ InMemQueueMessageConsumer = (*inMemQueueMessageConsumer)(nil)

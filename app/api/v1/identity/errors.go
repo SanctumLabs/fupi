@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 // respondError maps a domain or application error onto an HTTP status.

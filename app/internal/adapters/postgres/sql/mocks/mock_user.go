@@ -5,9 +5,9 @@ import (
 
 	"github.com/go-faker/faker/v4"
 	"github.com/jackc/pgx/v5/pgtype"
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
 )
 
 type MockUserOption func(*postgresql.User)

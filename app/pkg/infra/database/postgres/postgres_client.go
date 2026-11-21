@@ -3,12 +3,13 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	"golang.org/x/exp/slog"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
 )
 
 type (
@@ -41,7 +42,7 @@ func NewPostgresClient(config PostgresDatabaseConfig) (database.PostgresDatabase
 	ctx := context.Background()
 	logPrefix := "PostgresClient"
 
-	connStr := buildConnectionString(config)
+	connStr := ConnectionString(config)
 
 	slog.InfoContext(ctx, fmt.Sprintf("%s> connecting to database...", logPrefix), "name", config.Name, "host", config.Host, "port", config.Port)
 
@@ -69,6 +70,9 @@ func NewPostgresClient(config PostgresDatabaseConfig) (database.PostgresDatabase
 
 	// Connection timeout
 	poolConfig.ConnConfig.ConnectTimeout = config.ConnTimeout
+
+	// Trace every query and transaction step. The SQL text is recorded, its arguments are not (otelpgx's default); keep it so.
+	poolConfig.ConnConfig.Tracer = operationTracer{otelpgx.NewTracer(otelpgx.WithSpanNameFunc(spanName))}
 
 	// Use a local counter to avoid mutating the struct field
 	attemptsLeft := pg.connAttempts
@@ -113,6 +117,11 @@ func NewPostgresClient(config PostgresDatabaseConfig) (database.PostgresDatabase
 	if connectionErr != nil {
 		slog.ErrorContext(ctx, fmt.Sprintf("%s> 🚫 failed to connect to database, Error: %s", logPrefix, connectionErr), "error", connectionErr)
 		return nil, connectionErr
+	}
+
+	// Export the pool's statistics (acquired, idle and waiting connections) as metrics. A failure here only costs those metrics.
+	if statsErr := otelpgx.RecordStats(pg.db); statsErr != nil {
+		slog.WarnContext(ctx, fmt.Sprintf("%s> could not register the pool metrics", logPrefix), "error", statsErr)
 	}
 
 	slog.InfoContext(ctx, fmt.Sprintf("%s> ✅ connected to DB", logPrefix),

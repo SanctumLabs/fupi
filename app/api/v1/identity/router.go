@@ -4,8 +4,8 @@ package identityapi
 import (
 	"fmt"
 
-	identityapp "github.com/sanctumlabs/curtz/app/internal/application/identity"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/server/router"
+	identityapp "github.com/sanctumlabs/fupi/app/internal/application/identity"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
 )
 
 type identityRouter struct {

@@ -20,4 +20,10 @@ type CacheClient interface {
 
 	// Delete removes a given value with a given key from the cache
 	Delete(ctx context.Context, key string) error
+
+	// Ping checks that the cache is reachable
+	Ping(ctx context.Context) error
+
+	// Close releases the connections held by the client
+	Close() error
 }

@@ -13,8 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	cache "github.com/sanctumlabs/curtz/app/pkg/infra/cache"
-
+	cache "github.com/sanctumlabs/fupi/app/pkg/infra/cache"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -22,6 +21,7 @@ import (
 type MockCacheClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockCacheClientMockRecorder
+	isgomock struct{}
 }
 
 // MockCacheClientMockRecorder is the mock recorder for MockCacheClient.
@@ -39,6 +39,20 @@ func NewMockCacheClient(ctrl *gomock.Controller) *MockCacheClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockCacheClient) EXPECT() *MockCacheClientMockRecorder {
 	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockCacheClient) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockCacheClientMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCacheClient)(nil).Close))
 }
 
 // Delete mocks base method.
@@ -70,18 +84,32 @@ func (mr *MockCacheClientMockRecorder) Exists(ctx, key any) *gomock.Call {
 }
 
 // Get mocks base method.
-func (m *MockCacheClient) Get(ctx context.Context, key string, payloadType any) (cache.CacheItem, error) {
+func (m *MockCacheClient) Get(ctx context.Context, key string) (cache.CacheItem, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", ctx, key, payloadType)
+	ret := m.ctrl.Call(m, "Get", ctx, key)
 	ret0, _ := ret[0].(cache.CacheItem)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockCacheClientMockRecorder) Get(ctx, key, payloadType any) *gomock.Call {
+func (mr *MockCacheClientMockRecorder) Get(ctx, key any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockCacheClient)(nil).Get), ctx, key, payloadType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockCacheClient)(nil).Get), ctx, key)
+}
+
+// Ping mocks base method.
+func (m *MockCacheClient) Ping(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ping", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Ping indicates an expected call of Ping.
+func (mr *MockCacheClientMockRecorder) Ping(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockCacheClient)(nil).Ping), ctx)
 }
 
 // Set mocks base method.

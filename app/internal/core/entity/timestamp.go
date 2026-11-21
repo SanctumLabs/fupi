@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 // EntityTimestamp are the timestamps for when an entity was created, updated and/or deleted

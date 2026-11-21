@@ -16,21 +16,21 @@ import (
 
 	"github.com/go-faker/faker/v4"
 	"github.com/gofiber/fiber/v2"
-	identityapi "github.com/sanctumlabs/curtz/app/api/v1/identity"
-	"github.com/sanctumlabs/curtz/app/config"
-	"github.com/sanctumlabs/curtz/app/internal/adapters/jwtauth"
-	identitydatastore "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/identity"
-	identityapp "github.com/sanctumlabs/curtz/app/internal/application/identity"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/server/router"
-	"github.com/sanctumlabs/curtz/app/pkg/jwt"
-	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
-	"github.com/sanctumlabs/curtz/app/test"
+	identityapi "github.com/sanctumlabs/fupi/app/api/v1/identity"
+	"github.com/sanctumlabs/fupi/app/config"
+	"github.com/sanctumlabs/fupi/app/internal/adapters/jwtauth"
+	identitydatastore "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/identity"
+	identityapp "github.com/sanctumlabs/fupi/app/internal/application/identity"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
+	"github.com/sanctumlabs/fupi/app/pkg/jwt"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
+	"github.com/sanctumlabs/fupi/app/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
-const baseURI = "/api/v1/curtz"
+const baseURI = "/api/v1/fupi"
 
 // capturingNotifier stands in for the email transport so the test can read the verification link
 // the user would have received.
@@ -74,7 +74,7 @@ func (suite *IdentityE2ETestSuite) SetupSuite() {
 	authConfig := config.AuthConfig{
 		Jwt: config.Jwt{
 			Secret:             "e2e-test-secret",
-			Issuer:             "curtz-e2e",
+			Issuer:             "fupi-e2e",
 			ExpireDelta:        15,
 			RefreshExpireDelta: 24,
 		},

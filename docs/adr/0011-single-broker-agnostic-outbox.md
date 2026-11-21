@@ -15,10 +15,10 @@ Each row stores:
 - `destination`: the logical stream, e.g. `identity.events` (following the spec's `url.events`).
 - `event_type`: e.g. `user.registered`.
 - `payload`: the event's exported fields as JSON.
-- `headers`: `event_id`, `event_type`, `aggregate_id`, `occurred_at`, for the relay to forward as message headers.
+- `headers`: `event_id`, `event_type`, `aggregate_id`, `occurred_at` and, when the request had a trace, `traceparent` (and `tracestate`), for the relay to forward as message headers.
 
 ## Consequences
 
 - Identity writes `UserRegistered` (Save), `UserDeleted` (Update) and `UserVerified` (MarkVerified). `UserWriteDatastore.MarkVerified` takes the verified aggregate rather than a request, so its events reach the adapter.
 - The aggregate handed to a write must carry only events not yet persisted. The `User` a write returns is re-read from the database and carries none, so callers continue with that.
-- No relay exists yet, so rows accumulate unsent (`sent_time IS NULL`). The URL context adopts the same helper when its application layer lands.
+- The outbox relay (ADR-0018) delivers the rows to Kafka and records `sent_time`; a row the broker permanently rejects is parked (`parked_at`). The URL context adopts the same helper when its application layer lands.

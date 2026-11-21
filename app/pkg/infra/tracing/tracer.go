@@ -3,7 +3,8 @@ package tracing
 import (
 	"context"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type ContextKey string
@@ -36,8 +37,12 @@ func NewContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-// GetTraceID returns the trace ID from context, if none is available, create one
+// GetTraceID returns the W3C trace ID of the OpenTelemetry span in ctx, so logs, spans and outgoing calls carry one ID.
+// Without a span it returns the ID NewContext stored, and "" when there is neither.
 func GetTraceID(ctx context.Context) string {
+	if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
+		return sc.TraceID().String()
+	}
 	if id, ok := ctx.Value(TraceIDKey).(string); ok {
 		return id
 	}

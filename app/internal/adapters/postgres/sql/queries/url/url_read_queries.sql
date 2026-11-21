@@ -26,6 +26,14 @@ WHERE u.status = 'ACTIVE'
 ORDER BY u.expires_on ASC
 LIMIT sqlc.arg(limit_by);
 
+-- name: QueryCountExpiredActiveUrls :one
+SELECT
+  COUNT(*)
+FROM urls u
+WHERE u.status = 'ACTIVE'
+  AND u.deleted_at IS NULL
+  AND u.expires_on < sqlc.arg(expires_before);
+
 -- name: QueryAllUrls :many
 SELECT
   sqlc.embed(u),
@@ -108,3 +116,23 @@ ORDER BY
     THEN u.deleted_at END DESC
 LIMIT sqlc.arg(limit_by)
 OFFSET sqlc.arg(current_offset);
+
+-- idx_urls_original_url makes original_url unique among non-deleted rows, so at most one row can
+-- match. The ORDER BY and LIMIT are kept as cheap insurance so the result stays deterministic even
+-- if that index were ever dropped.
+-- name: QueryUrlByOriginalUrl :one
+SELECT
+  sqlc.embed(u)
+FROM urls u
+WHERE u.original_url = $1
+  AND u.deleted_at IS NULL
+ORDER BY u.created_at ASC
+LIMIT 1;
+
+-- name: QueryRedirectTargetByCode :one
+SELECT
+  u.original_url, u.status, u.expires_on
+FROM urls u
+WHERE u.short_code = $1 OR u.custom_alias = $1
+ORDER BY (u.short_code = $1) DESC
+LIMIT 1;

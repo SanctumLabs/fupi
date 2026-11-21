@@ -13,7 +13,7 @@ import (
 
 const queryAllUsers = `-- name: QueryAllUsers :many
 SELECT
-  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at,
+  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role,
   COUNT(*) OVER() AS total_records
 FROM users u
 WHERE ($1::bool OR u.deleted_at IS NULL)
@@ -72,7 +72,7 @@ type QueryAllUsersRow struct {
 // Date range filtering
 //
 //	SELECT
-//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at,
+//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role,
 //	  COUNT(*) OVER() AS total_records
 //	FROM users u
 //	WHERE ($1::bool OR u.deleted_at IS NULL)
@@ -143,6 +143,7 @@ func (q *Queries) QueryAllUsers(ctx context.Context, arg QueryAllUsersParams) ([
 			&i.User.CreatedAt,
 			&i.User.UpdatedAt,
 			&i.User.DeletedAt,
+			&i.User.Role,
 			&i.TotalRecords,
 		); err != nil {
 			return nil, err
@@ -157,7 +158,7 @@ func (q *Queries) QueryAllUsers(ctx context.Context, arg QueryAllUsersParams) ([
 
 const queryUserByEmail = `-- name: QueryUserByEmail :one
 SELECT
-  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 FROM users u
 WHERE u.email = $1 AND u.deleted_at IS NULL
 `
@@ -169,7 +170,7 @@ type QueryUserByEmailRow struct {
 // QueryUserByEmail
 //
 //	SELECT
-//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 //	FROM users u
 //	WHERE u.email = $1 AND u.deleted_at IS NULL
 func (q *Queries) QueryUserByEmail(ctx context.Context, email string) (QueryUserByEmailRow, error) {
@@ -190,13 +191,14 @@ func (q *Queries) QueryUserByEmail(ctx context.Context, email string) (QueryUser
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
 		&i.User.DeletedAt,
+		&i.User.Role,
 	)
 	return i, err
 }
 
 const queryUserById = `-- name: QueryUserById :one
 SELECT
-  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 FROM users u
 WHERE u.id = $1 AND u.deleted_at IS NULL
 `
@@ -208,7 +210,7 @@ type QueryUserByIdRow struct {
 // QueryUserById
 //
 //	SELECT
-//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 //	FROM users u
 //	WHERE u.id = $1 AND u.deleted_at IS NULL
 func (q *Queries) QueryUserById(ctx context.Context, id pgtype.UUID) (QueryUserByIdRow, error) {
@@ -229,13 +231,14 @@ func (q *Queries) QueryUserById(ctx context.Context, id pgtype.UUID) (QueryUserB
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
 		&i.User.DeletedAt,
+		&i.User.Role,
 	)
 	return i, err
 }
 
 const queryUserByUsername = `-- name: QueryUserByUsername :one
 SELECT
-  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 FROM users u
 WHERE u.username = $1 AND u.deleted_at IS NULL
 `
@@ -247,7 +250,7 @@ type QueryUserByUsernameRow struct {
 // QueryUserByUsername
 //
 //	SELECT
-//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 //	FROM users u
 //	WHERE u.username = $1 AND u.deleted_at IS NULL
 func (q *Queries) QueryUserByUsername(ctx context.Context, username string) (QueryUserByUsernameRow, error) {
@@ -268,13 +271,14 @@ func (q *Queries) QueryUserByUsername(ctx context.Context, username string) (Que
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
 		&i.User.DeletedAt,
+		&i.User.Role,
 	)
 	return i, err
 }
 
 const queryUserByVerificationToken = `-- name: QueryUserByVerificationToken :one
 SELECT
-  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 FROM users u
 WHERE u.verification_token = $1 AND u.deleted_at IS NULL
 `
@@ -286,7 +290,7 @@ type QueryUserByVerificationTokenRow struct {
 // QueryUserByVerificationToken
 //
 //	SELECT
-//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at
+//	  u.id, u.username, u.first_name, u.last_name, u.email, u.password_hash, u.verified, u.verification_token, u.verification_expires, u.status, u.metadata, u.created_at, u.updated_at, u.deleted_at, u.role
 //	FROM users u
 //	WHERE u.verification_token = $1 AND u.deleted_at IS NULL
 func (q *Queries) QueryUserByVerificationToken(ctx context.Context, verificationToken pgtype.Text) (QueryUserByVerificationTokenRow, error) {
@@ -307,6 +311,7 @@ func (q *Queries) QueryUserByVerificationToken(ctx context.Context, verification
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
 		&i.User.DeletedAt,
+		&i.User.Role,
 	)
 	return i, err
 }

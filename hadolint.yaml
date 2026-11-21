@@ -2,7 +2,4 @@
 trustedRegistries:
   - docker.io
   - ghcr.io
-
-ignored:
-    - DL3017
-    - DL3018
+  - gcr.io

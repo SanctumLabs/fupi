@@ -18,7 +18,7 @@ func TestJwtEncode(t *testing.T) {
 		{
 			uid:         "cbr8mmkbcv45shdhmeig",
 			signingKey:  "aHR0cHM6Ly9jdXJ0ei5zYW5jdH",
-			issuer:      "http:curtz-test.com",
+			issuer:      "http:fupi-test.com",
 			expireDelta: 1,
 			expectedErr: nil,
 		},
@@ -61,7 +61,7 @@ func TestJwtEncodeRefreshToken(t *testing.T) {
 		{
 			uid:         "cbr8mmkbcv45shdhmeig",
 			signingKey:  "aHR0cHM6Ly9jdXJ0ei5zYW5jdH",
-			issuer:      "http:curtz-test.com",
+			issuer:      "http:fupi-test.com",
 			expireDelta: 1,
 			expectedErr: nil,
 		},

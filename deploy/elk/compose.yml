@@ -1,0 +1,383 @@
+# Elastic stack for logs (Filebeat -> Logstash -> Elasticsearch data stream logs-fupi-default -> Kibana).
+#   HA      es-1..3 (3 master+data nodes), logstash-1..2, kibana-1..2 behind nginx (kibana-lb), filebeat-ha.
+#           elk-setup-certs-ha creates the CA and node certificates (transport TLS is required by multi-node clusters);
+#           elk-setup-ha provisions users, roles, ILM and the index template.
+#   single  es-single (alias es-1), logstash-single (alias logstash-1), kibana-single, filebeat-single.
+# Security is on in both modes. HTTP TLS is off locally.
+x-es-image: &es-image docker.elastic.co/elasticsearch/elasticsearch:9.5.4
+
+x-es-env: &es-env
+  cluster.name: fupi-logs
+  ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-fupi-elastic-dev}
+  bootstrap.memory_lock: "false"
+  xpack.security.enabled: "true"
+  xpack.security.http.ssl.enabled: "false"
+  xpack.ml.enabled: "false"
+  ES_JAVA_OPTS: -Xms${ES_HEAP:-512m} -Xmx${ES_HEAP:-512m}
+
+x-es-ha-env: &es-ha-env
+  <<: *es-env
+  discovery.seed_hosts: es-1,es-2,es-3
+  cluster.initial_master_nodes: es-1,es-2,es-3
+  xpack.security.transport.ssl.enabled: "true"
+  xpack.security.transport.ssl.verification_mode: certificate
+  xpack.security.transport.ssl.certificate_authorities: certs/ca/ca.crt
+
+x-es-common: &es-common
+  image: *es-image
+  restart: unless-stopped
+  depends_on:
+    elk-setup-certs-ha: {condition: service_completed_successfully}
+  ulimits:
+    memlock: {soft: -1, hard: -1}
+    nofile: {soft: 65536, hard: 65536}
+  healthcheck:
+    test: ["CMD-SHELL", "curl -s -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health | grep -Eq '\"status\":\"(green|yellow)\"'"]
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 40s
+
+x-setup-env: &setup-env
+  ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-fupi-elastic-dev}
+  KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-fupi-kibana-dev}
+  LOGSTASH_WRITER_PASSWORD: ${LOGSTASH_WRITER_PASSWORD:-fupi-logstash-dev}
+  GRAFANA_READER_PASSWORD: ${GRAFANA_READER_PASSWORD:-fupi-grafana-reader}
+  METRICS_READER_PASSWORD: ${METRICS_READER_PASSWORD:-fupi-metrics-dev}
+
+x-kibana-env: &kibana-env
+  SERVER_PUBLICBASEURL: http://localhost:5601
+  ELASTICSEARCH_USERNAME: kibana_system
+  ELASTICSEARCH_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-fupi-kibana-dev}
+  XPACK_SECURITY_ENCRYPTIONKEY: ${KIBANA_SECURITY_KEY:-fupi-dev-kibana-security-key-0123456789ab}
+  XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTED_OBJECTS_KEY:-fupi-dev-kibana-saved-objects-key-0123456789}
+  XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_KEY:-fupi-dev-kibana-reporting-key-0123456789ab}
+  TELEMETRY_OPTIN: "false"
+  NODE_OPTIONS: --max-old-space-size=768
+
+x-kibana-common: &kibana-common
+  image: docker.elastic.co/kibana/kibana:9.5.4
+  restart: unless-stopped
+  depends_on:
+    elk-setup-ha: {condition: service_completed_successfully}
+  healthcheck:
+    test: ["CMD-SHELL", "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'"]
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 60s
+
+x-logstash-common: &logstash-common
+  image: docker.elastic.co/logstash/logstash:9.5.4
+  restart: unless-stopped
+  environment:
+    LS_JAVA_OPTS: -Xms${LS_HEAP:-512m} -Xmx${LS_HEAP:-512m}
+    LOGSTASH_WRITER_PASSWORD: ${LOGSTASH_WRITER_PASSWORD:-fupi-logstash-dev}
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://localhost:9600 >/dev/null"]
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 40s
+
+services:
+  # ---- HA ------------------------------------------------------------------------------------------------------
+  # Creates the CA and node certificates (idempotent) and exits. The Elasticsearch nodes wait for it to complete.
+  elk-setup-certs-ha:
+    image: *es-image
+    user: "0"
+    profiles: [elk-ha, full-ha]
+    restart: "no"
+    environment:
+      ELK_MODE: certs
+    entrypoint: ["/bin/bash", "/setup.sh"]
+    volumes:
+      - es-certs:/usr/share/elasticsearch/config/certs
+      - ./setup.sh:/setup.sh:ro
+    networks:
+      - fupi
+
+  # Provisions users, roles, the ILM policy and the index template once the cluster is up (idempotent), then exits.
+  elk-setup-ha:
+    image: *es-image
+    user: "0"
+    profiles: [elk-ha, full-ha]
+    restart: "no"
+    depends_on:
+      es-1: {condition: service_healthy}
+    environment:
+      <<: *setup-env
+      ELK_MODE: ha
+      ES_URL: http://es-1:9200
+    entrypoint: ["/bin/bash", "/setup.sh"]
+    volumes:
+      - ./setup.sh:/setup.sh:ro
+    networks:
+      - fupi
+
+  es-1:
+    <<: *es-common
+    profiles: [elk-ha, full-ha]
+    environment:
+      <<: *es-ha-env
+      node.name: es-1
+      xpack.security.transport.ssl.key: certs/es-1/es-1.key
+      xpack.security.transport.ssl.certificate: certs/es-1/es-1.crt
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - es-1-data:/usr/share/elasticsearch/data
+      - es-certs:/usr/share/elasticsearch/config/certs:ro
+    networks:
+      - fupi
+
+  es-2:
+    <<: *es-common
+    profiles: [elk-ha, full-ha]
+    environment:
+      <<: *es-ha-env
+      node.name: es-2
+      xpack.security.transport.ssl.key: certs/es-2/es-2.key
+      xpack.security.transport.ssl.certificate: certs/es-2/es-2.crt
+    ports:
+      - "127.0.0.1:9201:9200"
+    volumes:
+      - es-2-data:/usr/share/elasticsearch/data
+      - es-certs:/usr/share/elasticsearch/config/certs:ro
+    networks:
+      - fupi
+
+  es-3:
+    <<: *es-common
+    profiles: [elk-ha, full-ha]
+    environment:
+      <<: *es-ha-env
+      node.name: es-3
+      xpack.security.transport.ssl.key: certs/es-3/es-3.key
+      xpack.security.transport.ssl.certificate: certs/es-3/es-3.crt
+    ports:
+      - "127.0.0.1:9202:9200"
+    volumes:
+      - es-3-data:/usr/share/elasticsearch/data
+      - es-certs:/usr/share/elasticsearch/config/certs:ro
+    networks:
+      - fupi
+
+  logstash-1:
+    <<: *logstash-common
+    profiles: [elk-ha, full-ha]
+    depends_on:
+      elk-setup-ha: {condition: service_completed_successfully}
+    volumes:
+      - logstash-1-data:/usr/share/logstash/data
+      - ./logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - ./logstash/pipeline/10-input.conf:/etc/logstash/conf.d/10-input.conf:ro
+      - ./logstash/pipeline/20-filter.conf:/etc/logstash/conf.d/20-filter.conf:ro
+      - ./logstash/pipeline/30-output-ha.conf:/etc/logstash/conf.d/30-output.conf:ro
+    networks:
+      - fupi
+
+  logstash-2:
+    <<: *logstash-common
+    profiles: [elk-ha, full-ha]
+    depends_on:
+      elk-setup-ha: {condition: service_completed_successfully}
+    volumes:
+      - logstash-2-data:/usr/share/logstash/data
+      - ./logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - ./logstash/pipeline/10-input.conf:/etc/logstash/conf.d/10-input.conf:ro
+      - ./logstash/pipeline/20-filter.conf:/etc/logstash/conf.d/20-filter.conf:ro
+      - ./logstash/pipeline/30-output-ha.conf:/etc/logstash/conf.d/30-output.conf:ro
+    networks:
+      - fupi
+
+  kibana-1:
+    <<: *kibana-common
+    profiles: [elk-ha, full-ha]
+    environment:
+      <<: *kibana-env
+      SERVER_NAME: kibana-1
+      ELASTICSEARCH_HOSTS: '["http://es-1:9200","http://es-2:9200","http://es-3:9200"]'
+    networks:
+      - fupi
+
+  kibana-2:
+    <<: *kibana-common
+    profiles: [elk-ha, full-ha]
+    environment:
+      <<: *kibana-env
+      SERVER_NAME: kibana-2
+      ELASTICSEARCH_HOSTS: '["http://es-1:9200","http://es-2:9200","http://es-3:9200"]'
+    networks:
+      - fupi
+
+  kibana-lb:
+    image: nginx:1.30.5-alpine
+    profiles: [elk-ha, full-ha]
+    restart: unless-stopped
+    depends_on:
+      kibana-1: {condition: service_healthy}
+      kibana-2: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:5601:5601"
+    volumes:
+      - ./nginx/kibana.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      fupi:
+        aliases: [kibana]
+
+  filebeat-ha:
+    image: docker.elastic.co/beats/filebeat:9.5.4
+    user: root
+    profiles: [elk-ha, full-ha]
+    restart: unless-stopped
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    depends_on:
+      logstash-1: {condition: service_healthy}
+      logstash-2: {condition: service_healthy}
+    volumes:
+      - ./filebeat/filebeat-ha.yml:/usr/share/filebeat/filebeat.yml:ro
+      - filebeat-ha-data:/usr/share/filebeat/data
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - fupi
+
+  logstash-exporter-2:
+    image: kuskoman/logstash-exporter:v1.9.1
+    profiles: [elk-ha, full-ha]
+    restart: unless-stopped
+    environment:
+      LOGSTASH_URL: http://logstash-2:9600
+    networks:
+      - fupi
+
+  # ---- single --------------------------------------------------------------------------------------------------
+  es-single:
+    image: *es-image
+    profiles: [elk-single, full-single]
+    restart: unless-stopped
+    environment:
+      <<: *es-env
+      node.name: es-1
+      discovery.type: single-node
+    ports:
+      - "127.0.0.1:9200:9200"
+    ulimits:
+      memlock: {soft: -1, hard: -1}
+      nofile: {soft: 65536, hard: 65536}
+    volumes:
+      - es-single-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health | grep -Eq '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    networks:
+      fupi:
+        aliases: [es-1]
+
+  elk-setup-single:
+    image: *es-image
+    user: "0"
+    profiles: [elk-single, full-single]
+    restart: "no"
+    depends_on:
+      es-single: {condition: service_healthy}
+    environment:
+      <<: *setup-env
+      ELK_MODE: single
+      ES_URL: http://es-1:9200
+    entrypoint: ["/bin/bash", "/setup.sh"]
+    volumes:
+      - ./setup.sh:/setup.sh:ro
+    networks:
+      - fupi
+
+  logstash-single:
+    <<: *logstash-common
+    profiles: [elk-single, full-single]
+    depends_on:
+      elk-setup-single: {condition: service_completed_successfully}
+    volumes:
+      - logstash-single-data:/usr/share/logstash/data
+      - ./logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - ./logstash/pipeline/10-input.conf:/etc/logstash/conf.d/10-input.conf:ro
+      - ./logstash/pipeline/20-filter.conf:/etc/logstash/conf.d/20-filter.conf:ro
+      - ./logstash/pipeline/30-output-single.conf:/etc/logstash/conf.d/30-output.conf:ro
+    networks:
+      fupi:
+        aliases: [logstash-1]
+
+  kibana-single:
+    <<: *kibana-common
+    profiles: [elk-single, full-single]
+    depends_on:
+      elk-setup-single: {condition: service_completed_successfully}
+    environment:
+      <<: *kibana-env
+      SERVER_NAME: kibana
+      ELASTICSEARCH_HOSTS: http://es-1:9200
+    ports:
+      - "127.0.0.1:5601:5601"
+    networks:
+      - fupi
+
+  # Reads container logs, so it runs as root and mounts the Docker socket read-only: the one documented
+  # least-privilege exception in this stack.
+  filebeat-single:
+    image: docker.elastic.co/beats/filebeat:9.5.4
+    user: root
+    profiles: [elk-single, full-single]
+    restart: unless-stopped
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    depends_on:
+      logstash-single: {condition: service_healthy}
+    volumes:
+      - ./filebeat/filebeat-single.yml:/usr/share/filebeat/filebeat.yml:ro
+      - filebeat-single-data:/usr/share/filebeat/data
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - fupi
+
+  # ---- shared by both modes: they reach the cluster through es-1 / logstash-1 -------------------------------------
+  elasticsearch-exporter:
+    image: quay.io/prometheuscommunity/elasticsearch-exporter:v1.11.0
+    profiles: [elk-ha, elk-single, full-ha, full-single]
+    restart: unless-stopped
+    command:
+      - "--es.uri=http://metrics_reader:${METRICS_READER_PASSWORD:-fupi-metrics-dev}@es-1:9200"
+      - "--es.all"
+      - "--es.indices"
+    networks:
+      - fupi
+
+  logstash-exporter-1:
+    image: kuskoman/logstash-exporter:v1.9.1
+    profiles: [elk-ha, elk-single, full-ha, full-single]
+    restart: unless-stopped
+    environment:
+      LOGSTASH_URL: http://logstash-1:9600
+    networks:
+      - fupi
+
+volumes:
+  es-certs:
+  es-1-data:
+  es-2-data:
+  es-3-data:
+  es-single-data:
+  logstash-1-data:
+  logstash-2-data:
+  logstash-single-data:
+  filebeat-ha-data:
+  filebeat-single-data:
+
+networks:
+  fupi:
+    name: fupi

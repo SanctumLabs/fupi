@@ -1,0 +1,42 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+
+  # Logs live in Elasticsearch (ELK). Reachable only while an ELK stack is running.
+  - name: Elasticsearch
+    uid: elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://es-1:9200
+    basicAuth: true
+    basicAuthUser: grafana_reader
+    editable: false
+    jsonData:
+      index: "logs-fupi-*"
+      timeField: "@timestamp"
+      logMessageField: message
+      logLevelField: log.level
+    secureJsonData:
+      basicAuthPassword: $GRAFANA_READER_PASSWORD
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      serviceMap:
+        datasourceUid: prometheus
+      # Jump from a span to the log lines that carry its trace id. "$$" is Grafana's escape for a literal "$".
+      tracesToLogsV2:
+        datasourceUid: elasticsearch
+        customQuery: true
+        query: 'trace.id:"$${__trace.traceId}"'

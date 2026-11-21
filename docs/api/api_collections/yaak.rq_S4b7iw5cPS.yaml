@@ -1,0 +1,36 @@
+type: http_request
+model: http_request
+id: rq_S4b7iw5cPS
+createdAt: 2026-10-08T16:01:15.536280
+updatedAt: 2026-10-08T16:20:54.539815
+workspaceId: wk_J5K7834vTe
+folderId: fl_AWSqb83Suw
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: ''
+headers: []
+method: GET
+name: App Health
+sortPriority: 1000.0
+url: ${[ API_BASE_URL ]}/health
+urlParameters: []
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingHttpVersion:
+  enabled: false
+  value: auto

@@ -2,7 +2,8 @@ package interceptors
 
 import (
 	"context"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/tracing"
+
+	"github.com/sanctumlabs/fupi/app/pkg/infra/tracing"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

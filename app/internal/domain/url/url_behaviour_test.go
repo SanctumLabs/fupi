@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 func mustShortCode(t *testing.T, v string) ShortCode {
@@ -82,6 +82,41 @@ func TestCreate(t *testing.T) {
 		p.ExpiresOn = time.Now().Add(-time.Hour)
 		if _, err := Create(p); !errors.Is(err, errdefs.ErrPastExpiration) {
 			t.Errorf("err = %v, want ErrPastExpiration", err)
+		}
+	})
+
+	t.Run("rejects a custom alias shaped like a short code", func(t *testing.T) {
+		// 6 to 10 letters and digits is every length a short code can have: the 6-character codes issued before
+		// ADR-0019, the 7-character ones issued now and the longer ones its exhaustion plan adds.
+		for _, alias := range []string{"abcdef", "Abc1234", "abcd1234", "abcdefghij"} {
+			p := validCreateParams(t)
+			p.CustomAlias = alias
+			if _, err := Create(p); !errors.Is(err, errdefs.ErrCustomAliasLikeShortCode) {
+				t.Errorf("alias %q: err = %v, want ErrCustomAliasLikeShortCode", alias, err)
+			}
+		}
+	})
+
+	t.Run("accepts a custom alias no short code can equal", func(t *testing.T) {
+		for _, alias := range []string{"abc", "abcde", "my-alias", "abc-123", "abcdefghijk", "abcdefghijkl"} {
+			p := validCreateParams(t)
+			p.CustomAlias = alias
+			u, err := Create(p)
+			if err != nil {
+				t.Errorf("alias %q: unexpected error %v", alias, err)
+				continue
+			}
+			if u.CustomAlias().Value() != alias {
+				t.Errorf("alias = %q, want %q", u.CustomAlias().Value(), alias)
+			}
+		}
+	})
+
+	t.Run("still hydrates a stored alias shaped like a short code", func(t *testing.T) {
+		p := createValidURLParams()
+		p.CustomAlias = "abcdef"
+		if _, err := NewUrl(p); err != nil {
+			t.Errorf("NewUrl with a pre-existing code-shaped alias: %v", err)
 		}
 	})
 
@@ -203,6 +238,24 @@ func TestURL_StatusTransitions(t *testing.T) {
 	})
 }
 
+func TestURL_Purge(t *testing.T) {
+	for _, status := range []URLStatus{URLStatusActive, URLStatusExpired, URLStatusSuspended, URLStatusDeleted} {
+		u := urlWithStatus(t, status)
+		u.Purge()
+
+		purged, ok := lastEvent(t, u).(URLPurged)
+		if !ok {
+			t.Fatalf("%s: event is %T, want URLPurged", status, lastEvent(t, u))
+		}
+		if purged.EventType() != "url.purged" || purged.URLID != entity.IDToString(u.ID()) || purged.ShortCode != u.ShortCode().Value() {
+			t.Errorf("%s: unexpected URLPurged payload: %+v", status, purged)
+		}
+		if u.Status() != status {
+			t.Errorf("Purge changed the status from %s to %s", status, u.Status())
+		}
+	}
+}
+
 func TestURL_UpdateExpiry(t *testing.T) {
 	t.Run("extends expiry on ACTIVE url", func(t *testing.T) {
 		u := urlWithStatus(t, URLStatusActive)
@@ -274,4 +327,38 @@ func TestURL_Keywords(t *testing.T) {
 			t.Errorf("err = %v, want ErrKeywordsCount", err)
 		}
 	})
+}
+
+// LoadedUpdatedAt is the version a datastore guards its update with: it stays what the aggregate was loaded with while
+// the aggregate's own updated time moves on with every change.
+func TestLoadedUpdatedAt_StaysTheHydratedTimeWhileTheEntityChanges(t *testing.T) {
+	p := createValidURLParams()
+	p.CreatedAt = time.Now().Add(-2 * time.Hour)
+	p.UpdatedAt = time.Now().Add(-time.Hour)
+	u, err := NewUrl(p)
+	if err != nil {
+		t.Fatalf("NewUrl: %v", err)
+	}
+	loaded := u.UpdatedAt()
+
+	if err := u.MarkExpired(); err != nil {
+		t.Fatalf("MarkExpired: %v", err)
+	}
+
+	if !u.LoadedUpdatedAt().Equal(loaded) {
+		t.Errorf("LoadedUpdatedAt() = %s, want %s", u.LoadedUpdatedAt(), loaded)
+	}
+	if !u.UpdatedAt().After(loaded) {
+		t.Errorf("UpdatedAt() = %s, want it after %s", u.UpdatedAt(), loaded)
+	}
+}
+
+func TestLoadedUpdatedAt_IsZeroForANewUrl(t *testing.T) {
+	u, err := Create(validCreateParams(t))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !u.LoadedUpdatedAt().IsZero() {
+		t.Errorf("LoadedUpdatedAt() = %s, want zero: nothing is stored yet", u.LoadedUpdatedAt())
+	}
 }

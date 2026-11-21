@@ -3,8 +3,10 @@
 package identityapp
 
 import (
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	"github.com/sanctumlabs/curtz/app/internal/ports"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	"github.com/sanctumlabs/fupi/app/internal/ports"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Service exposes the Identity use cases.
@@ -12,6 +14,7 @@ type Service struct {
 	users     identity.UserDatastore
 	tokens    ports.TokenService
 	notifier  ports.Notifier
+	tracer    trace.Tracer
 	logPrefix string
 }
 
@@ -21,6 +24,7 @@ func NewService(users identity.UserDatastore, tokens ports.TokenService, notifie
 		users:     users,
 		tokens:    tokens,
 		notifier:  notifier,
+		tracer:    otel.Tracer(instrumentationName),
 		logPrefix: "IdentityService",
 	}
 }

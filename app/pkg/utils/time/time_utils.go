@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/pkg/utils"
+	"github.com/sanctumlabs/fupi/app/pkg/utils"
 )
 
 func ParseIsoTimeToTime(isoTime string) (*time.Time, error) {

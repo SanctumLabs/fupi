@@ -2,8 +2,9 @@ package inmemqueue
 
 import (
 	"context"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/queue"
 	"log/slog"
+
+	"github.com/sanctumlabs/fupi/app/pkg/infra/queue"
 
 	"github.com/google/wire"
 )

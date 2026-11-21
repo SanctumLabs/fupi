@@ -1,0 +1,34 @@
+type: folder
+model: folder
+id: fl_AWSqb83Suw
+createdAt: 2026-10-08T16:20:45.782767
+updatedAt: 2026-10-08T16:20:49.283325
+workspaceId: wk_J5K7834vTe
+folderId: null
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: Probes
+sortPriority: 1000.0
+settingSendCookies:
+  enabled: false
+  value: true
+settingStoreCookies:
+  enabled: false
+  value: true
+settingValidateCertificates:
+  enabled: false
+  value: true
+settingFollowRedirects:
+  enabled: false
+  value: true
+settingRequestTimeout:
+  enabled: false
+  value: 0
+settingRequestMessageSize:
+  enabled: false
+  value: 67108864
+settingHttpVersion:
+  enabled: false
+  value: auto

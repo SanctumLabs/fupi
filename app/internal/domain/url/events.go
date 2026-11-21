@@ -3,7 +3,7 @@ package url
 import (
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
 )
 
 // SuspensionReason is why a URL was suspended by the Security context
@@ -47,11 +47,24 @@ type URLAccessed struct {
 	baseEvent
 	URLID       string
 	ShortCode   string
-	IPAddress   string
+	IPAddress   string // never set: no raw IP leaves the process (#344)
 	UserAgent   string
 	Referer     string
 	CountryCode string // resolved by GeoIP before publishing
 	DeviceType  string // mobile | desktop | bot
+}
+
+// NewURLAccessed raises a URLAccessed. It takes no IP address: the country is resolved from it before this point and the
+// address is not published (see IPAddress).
+func NewURLAccessed(shortCode, userAgent, referer, countryCode, deviceType string) URLAccessed {
+	return URLAccessed{
+		baseEvent:   newBaseEvent("url.accessed"),
+		ShortCode:   shortCode,
+		UserAgent:   userAgent,
+		Referer:     referer,
+		CountryCode: countryCode,
+		DeviceType:  deviceType,
+	}
 }
 
 type URLExpired struct {
@@ -73,6 +86,14 @@ type URLReinstated struct {
 }
 
 type URLDeleted struct {
+	baseEvent
+	URLID     string
+	ShortCode string
+}
+
+// URLPurged means the url and everything attached to it were removed for good, for example on an erasure request. It
+// carries no owner and no target, so consumers can drop what they hold for the url without receiving personal data.
+type URLPurged struct {
 	baseEvent
 	URLID     string
 	ShortCode string

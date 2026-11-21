@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 var customAliasRe = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)

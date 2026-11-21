@@ -1,0 +1,47 @@
+# Shared by patroni-1..3. Node identity comes from PATRONI_NAME, PATRONI_RESTAPI_CONNECT_ADDRESS and
+# PATRONI_POSTGRESQL_CONNECT_ADDRESS; credentials from PATRONI_SUPERUSER_* and PATRONI_REPLICATION_*.
+scope: fupi
+namespace: /service/
+
+etcd3:
+  hosts: etcd-1:2379,etcd-2:2379,etcd-3:2379
+
+restapi:
+  listen: 0.0.0.0:8008
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    # Asynchronous replication by default. Set to true (and optionally synchronous_mode_strict) to trade write
+    # latency for zero data loss on failover.
+    synchronous_mode: false
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        wal_log_hints: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        max_connections: 200
+        shared_buffers: 128MB
+        shared_preload_libraries: pg_stat_statements
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  pg_hba:
+    - local all all trust
+    - host replication replicator 0.0.0.0/0 scram-sha-256
+    - host all all 0.0.0.0/0 scram-sha-256
+  post_bootstrap: /usr/local/bin/roles.sh
+
+postgresql:
+  listen: 0.0.0.0:5432
+  data_dir: /var/lib/postgresql/patroni-data
+  pgpass: /tmp/pgpass
+  parameters:
+    unix_socket_directories: /var/run/postgresql

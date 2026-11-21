@@ -1,0 +1,113 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Everything except Prometheus itself is found with DNS service discovery on compose service names. A component that
+# is not running (the other mode, or a stack that is stopped) has no DNS record, so it has no targets and cannot raise
+# a false "down" alert. Trade-off: a container that crashes drops out of discovery instead of reporting up == 0, so
+# stack health is alerted on from the exporters' own signals (see rules/stack.yml).
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: otel-collector
+    dns_sd_configs:
+      - names: [otel-collector]
+        type: A
+        port: 8889
+    relabel_configs: &by_dns_name
+      - source_labels: [__meta_dns_name]
+        target_label: instance
+
+  - job_name: otel-collector-internal
+    dns_sd_configs:
+      - names: [otel-collector]
+        type: A
+        port: 8888
+    relabel_configs: *by_dns_name
+
+  - job_name: tempo
+    dns_sd_configs:
+      - names: [tempo]
+        type: A
+        port: 3200
+    relabel_configs: *by_dns_name
+
+  - job_name: grafana
+    dns_sd_configs:
+      - names: [grafana]
+        type: A
+        port: 3000
+    relabel_configs: *by_dns_name
+
+  - job_name: alertmanager
+    dns_sd_configs:
+      - names: [alertmanager]
+        type: A
+        port: 9093
+    relabel_configs: *by_dns_name
+
+  - job_name: kafka
+    dns_sd_configs:
+      - names: [kafka-exporter]
+        type: A
+        port: 9308
+    relabel_configs: *by_dns_name
+
+  - job_name: redis
+    dns_sd_configs:
+      - names: [redis-exporter]
+        type: A
+        port: 9121
+    relabel_configs: *by_dns_name
+
+  - job_name: postgres
+    dns_sd_configs:
+      - names: [postgres-exporter]
+        type: A
+        port: 9187
+    relabel_configs: *by_dns_name
+
+  - job_name: patroni
+    dns_sd_configs:
+      - names: [patroni-1, patroni-2, patroni-3]
+        type: A
+        port: 8008
+    relabel_configs: *by_dns_name
+
+  - job_name: etcd
+    dns_sd_configs:
+      - names: [etcd-1, etcd-2, etcd-3]
+        type: A
+        port: 2381
+    relabel_configs: *by_dns_name
+
+  - job_name: haproxy
+    dns_sd_configs:
+      - names: [haproxy]
+        type: A
+        port: 8404
+    relabel_configs: *by_dns_name
+
+  - job_name: elasticsearch
+    dns_sd_configs:
+      - names: [elasticsearch-exporter]
+        type: A
+        port: 9114
+    relabel_configs: *by_dns_name
+
+  - job_name: logstash
+    dns_sd_configs:
+      - names: [logstash-exporter-1, logstash-exporter-2]
+        type: A
+        port: 9198
+    relabel_configs: *by_dns_name

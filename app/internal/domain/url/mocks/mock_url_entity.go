@@ -1,23 +1,54 @@
 package urlmock
 
 import (
+	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"github.com/go-faker/faker/v4"
-	"github.com/go-faker/faker/v4/pkg/options"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/url"
-	timeutils "github.com/sanctumlabs/curtz/app/pkg/utils/time"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/url"
+	timeutils "github.com/sanctumlabs/fupi/app/pkg/utils/time"
 )
+
+// base62Alphabet is the character set shared by the ShortCode and CustomAlias value objects.
+const base62Alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// randomBase62 returns a random base62 string of exactly n characters.
+//
+// faker.Word is deliberately not used for these fields. It returns a word from a fixed dictionary
+// and ignores options.WithRandomStringLength, so its length is arbitrary — a 4-character word such
+// as "odit" fails the ShortCode 6-10 character rule, and a long one fails the CustomAlias 3-12
+// character rule. That made MockUrl return an error at random. Generating the characters here keeps
+// every mock URL valid, and makes short codes effectively collision-free for tests that persist
+// several URLs against the unique index on urls.short_code.
+func randomBase62(n int) string {
+	value := make([]byte, n)
+	for i := range value {
+		value[i] = base62Alphabet[rand.IntN(len(base62Alphabet))]
+	}
+	return string(value)
+}
+
+// randomOriginalUrl returns a URL that always satisfies the OriginalURL value object.
+//
+// faker.URL() is not used: it draws paths from a fixed set of templates, one of which contains
+// "xxx", and the domain's FilterRegex rejects that — so roughly one call in a thousand made MockUrl
+// return an error. The hex suffix below cannot contain any filtered token (they all need letters
+// outside 0-9a-f, or dots), comfortably clears the 15 character minimum, and keeps each generated
+// URL distinct so tests may persist several of them.
+func randomOriginalUrl() string {
+	return fmt.Sprintf("https://example.com/%016x", rand.Uint64())
+}
 
 type MockUrlOption func(*url.URLParams)
 
 func MockUrl(mockUrlOption ...MockUrlOption) (*url.URL, error) {
 	id := faker.UUIDHyphenated()
 	userId := faker.UUIDHyphenated()
-	shortCode := faker.Word(options.WithRandomStringLength(7))
-	customAlias := faker.Word(options.WithRandomStringLength(4))
-	originalUrl := faker.URL()
+	shortCode := randomBase62(7)
+	customAlias := randomBase62(6)
+	originalUrl := randomOriginalUrl()
 	var expiresOn time.Time
 	expiresOnTimestamp := faker.Timestamp()
 	if parsedExpiresOn, expiresOnTimestampErr := timeutils.ParseHumanFriendlyDate(expiresOnTimestamp); expiresOnTimestampErr != nil {
@@ -163,5 +194,17 @@ func WithOgImageUrl(ogImageUrl string) MockUrlOption {
 func WithExpiresOn(expiresOn time.Time) MockUrlOption {
 	return func(r *url.URLParams) {
 		r.ExpiresOn = expiresOn
+	}
+}
+
+func WithKeywords(keywords []string) MockUrlOption {
+	return func(r *url.URLParams) {
+		r.Keywords = keywords
+	}
+}
+
+func WithStatus(status url.URLStatus) MockUrlOption {
+	return func(r *url.URLParams) {
+		r.Status = status
 	}
 }

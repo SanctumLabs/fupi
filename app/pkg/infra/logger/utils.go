@@ -26,18 +26,6 @@ func toLogLevel(level string) LogLevel {
 	return UndefinedLevel
 }
 
-func getLoggers() map[string]Logger {
-	globalLoggersLock.RLock()
-	defer globalLoggersLock.RUnlock()
-
-	l := map[string]Logger{}
-	for k, v := range globalLoggers {
-		l[k] = v
-	}
-
-	return l
-}
-
 func colorize(colorCode int, v string) string {
 	return fmt.Sprintf("\033[%sm%s%s", strconv.Itoa(colorCode), v, reset)
 }

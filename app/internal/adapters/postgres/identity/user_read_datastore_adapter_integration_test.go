@@ -8,14 +8,14 @@ import (
 
 	"github.com/go-faker/faker/v4"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	mockidentity "github.com/sanctumlabs/curtz/app/internal/domain/identity/mocks"
-	"github.com/sanctumlabs/curtz/app/internal/pkg/common"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
-	"github.com/sanctumlabs/curtz/app/test"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	mockidentity "github.com/sanctumlabs/fupi/app/internal/domain/identity/mocks"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
+	"github.com/sanctumlabs/fupi/app/test"
 	"github.com/stretchr/testify/assert"
 )
 

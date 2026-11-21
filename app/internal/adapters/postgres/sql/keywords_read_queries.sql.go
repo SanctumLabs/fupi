@@ -11,6 +11,54 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const queryActiveKeywordsByUrlIds = `-- name: QueryActiveKeywordsByUrlIds :many
+SELECT
+  kw.id, kw.url_id, kw.value, kw.created_at, kw.updated_at, kw.deleted_at
+FROM keywords kw
+WHERE kw.url_id = ANY($1::uuid[])
+  AND kw.deleted_at IS NULL
+ORDER BY kw.created_at ASC, kw.id ASC
+`
+
+type QueryActiveKeywordsByUrlIdsRow struct {
+	Keyword Keyword `db:"keyword" json:"keyword"`
+}
+
+// QueryActiveKeywordsByUrlIds
+//
+//	SELECT
+//	  kw.id, kw.url_id, kw.value, kw.created_at, kw.updated_at, kw.deleted_at
+//	FROM keywords kw
+//	WHERE kw.url_id = ANY($1::uuid[])
+//	  AND kw.deleted_at IS NULL
+//	ORDER BY kw.created_at ASC, kw.id ASC
+func (q *Queries) QueryActiveKeywordsByUrlIds(ctx context.Context, urlIds []pgtype.UUID) ([]QueryActiveKeywordsByUrlIdsRow, error) {
+	rows, err := q.db.Query(ctx, queryActiveKeywordsByUrlIds, urlIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryActiveKeywordsByUrlIdsRow
+	for rows.Next() {
+		var i QueryActiveKeywordsByUrlIdsRow
+		if err := rows.Scan(
+			&i.Keyword.ID,
+			&i.Keyword.UrlID,
+			&i.Keyword.Value,
+			&i.Keyword.CreatedAt,
+			&i.Keyword.UpdatedAt,
+			&i.Keyword.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const queryAllKeywords = `-- name: QueryAllKeywords :many
 SELECT 
   kw.id, kw.url_id, kw.value, kw.created_at, kw.updated_at, kw.deleted_at,

@@ -1,0 +1,226 @@
+# Postgres 18.
+#   HA      patroni-1..3 (Patroni-managed Postgres) + etcd-1..3 (3-member quorum) + haproxy.
+#           haproxy answers to the alias "postgres": :5432 reaches the primary, :5433 the replicas.
+#   single  postgres-single: one plain Postgres node. Host ports 5432 and 5433 both reach it, so code that splits
+#           reads (5433) from writes (5432) works in both modes. It answers to the alias "postgres" too.
+#   migrate and postgres-exporter are shared by both modes and reach the database through "postgres:5432".
+x-pg-env: &pg-env
+  PG_DATABASE: ${PG_DATABASE:-fupidb}
+  PG_APP_USER: ${PG_APP_USER:-fupi-user}
+  PG_APP_PASSWORD: ${PG_APP_PASSWORD:-fupi-pass}
+  PG_EXPORTER_PASSWORD: ${PG_EXPORTER_PASSWORD:-fupi-exporter}
+
+x-patroni-env: &patroni-env
+  <<: *pg-env
+  PATRONI_SUPERUSER_USERNAME: postgres
+  PATRONI_SUPERUSER_PASSWORD: ${PG_SUPERUSER_PASSWORD:-fupi-postgres-admin}
+  PATRONI_REPLICATION_USERNAME: replicator
+  PATRONI_REPLICATION_PASSWORD: ${PG_REPLICATION_PASSWORD:-fupi-replication}
+
+x-etcd: &etcd
+  image: quay.io/coreos/etcd:v3.6.15
+  restart: unless-stopped
+
+x-patroni: &patroni
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: fupi-patroni:18.6-4.1.5
+  restart: unless-stopped
+  depends_on:
+    etcd-1: {condition: service_started}
+    etcd-2: {condition: service_started}
+    etcd-3: {condition: service_started}
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://localhost:8008/health >/dev/null"]
+    interval: 5s
+    timeout: 3s
+    retries: 30
+    start_period: 20s
+
+services:
+  etcd-1:
+    <<: *etcd
+    profiles: [postgres-ha, core-ha, full-ha]
+    command:
+      - etcd
+      - --name=etcd-1
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd-1:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd-1:2380
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380
+      - --initial-cluster-token=fupi-etcd
+      - --initial-cluster-state=new
+      - --listen-metrics-urls=http://0.0.0.0:2381
+    volumes:
+      - etcd-1-data:/etcd-data
+    networks:
+      - fupi
+
+  etcd-2:
+    <<: *etcd
+    profiles: [postgres-ha, core-ha, full-ha]
+    command:
+      - etcd
+      - --name=etcd-2
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd-2:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd-2:2380
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380
+      - --initial-cluster-token=fupi-etcd
+      - --initial-cluster-state=new
+      - --listen-metrics-urls=http://0.0.0.0:2381
+    volumes:
+      - etcd-2-data:/etcd-data
+    networks:
+      - fupi
+
+  etcd-3:
+    <<: *etcd
+    profiles: [postgres-ha, core-ha, full-ha]
+    command:
+      - etcd
+      - --name=etcd-3
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd-3:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd-3:2380
+      - --initial-cluster=etcd-1=http://etcd-1:2380,etcd-2=http://etcd-2:2380,etcd-3=http://etcd-3:2380
+      - --initial-cluster-token=fupi-etcd
+      - --initial-cluster-state=new
+      - --listen-metrics-urls=http://0.0.0.0:2381
+    volumes:
+      - etcd-3-data:/etcd-data
+    networks:
+      - fupi
+
+  patroni-1:
+    <<: *patroni
+    profiles: [postgres-ha, core-ha, full-ha]
+    environment:
+      <<: *patroni-env
+      PATRONI_NAME: patroni-1
+      PATRONI_RESTAPI_CONNECT_ADDRESS: patroni-1:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: patroni-1:5432
+    ports:
+      - "127.0.0.1:8008:8008"
+    volumes:
+      - pgdata-1:/var/lib/postgresql
+      - ./patroni.yml:/etc/patroni/patroni.yml:ro
+    networks:
+      - fupi
+
+  patroni-2:
+    <<: *patroni
+    profiles: [postgres-ha, core-ha, full-ha]
+    environment:
+      <<: *patroni-env
+      PATRONI_NAME: patroni-2
+      PATRONI_RESTAPI_CONNECT_ADDRESS: patroni-2:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: patroni-2:5432
+    ports:
+      - "127.0.0.1:8009:8008"
+    volumes:
+      - pgdata-2:/var/lib/postgresql
+      - ./patroni.yml:/etc/patroni/patroni.yml:ro
+    networks:
+      - fupi
+
+  patroni-3:
+    <<: *patroni
+    profiles: [postgres-ha, core-ha, full-ha]
+    environment:
+      <<: *patroni-env
+      PATRONI_NAME: patroni-3
+      PATRONI_RESTAPI_CONNECT_ADDRESS: patroni-3:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: patroni-3:5432
+    ports:
+      - "127.0.0.1:8010:8008"
+    volumes:
+      - pgdata-3:/var/lib/postgresql
+      - ./patroni.yml:/etc/patroni/patroni.yml:ro
+    networks:
+      - fupi
+
+  haproxy:
+    image: haproxy:3.2.25-alpine
+    profiles: [postgres-ha, core-ha, full-ha]
+    restart: unless-stopped
+    depends_on:
+      patroni-1: {condition: service_started}
+      patroni-2: {condition: service_started}
+      patroni-3: {condition: service_started}
+    ports:
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5433"
+      - "127.0.0.1:8404:8404"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      fupi:
+        aliases: [postgres]
+
+  postgres-single:
+    image: postgres:18.6
+    profiles: [postgres-single, core-single, full-single]
+    restart: unless-stopped
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "max_connections=200"]
+    environment:
+      <<: *pg-env
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD:-fupi-postgres-admin}
+    ports:
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres-single-data:/var/lib/postgresql
+      - ./roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      fupi:
+        aliases: [postgres]
+
+  # Applies ./app/internal/adapters/postgres/migrations. Retries until the database accepts connections, so it also
+  # works while Patroni is still electing a primary. Re-running is a no-op ("no change").
+  migrate:
+    image: migrate/migrate:v4.19.1
+    profiles: [postgres-ha, postgres-single, core-ha, core-single, full-ha, full-single]
+    restart: "on-failure:10"
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${PG_APP_USER:-fupi-user}:${PG_APP_PASSWORD:-fupi-pass}@postgres:5432/${PG_DATABASE:-fupidb}?sslmode=disable&x-migrations-table=schema_migrations"
+      - "up"
+    volumes:
+      - ../../app/internal/adapters/postgres/migrations:/migrations:ro
+    networks:
+      - fupi
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    profiles: [postgres-ha, postgres-single, core-ha, core-single, full-ha, full-single]
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://exporter:${PG_EXPORTER_PASSWORD:-fupi-exporter}@postgres:5432/postgres?sslmode=disable"
+    networks:
+      - fupi
+
+volumes:
+  etcd-1-data:
+  etcd-2-data:
+  etcd-3-data:
+  pgdata-1:
+  pgdata-2:
+  pgdata-3:
+  postgres-single-data:
+
+networks:
+  fupi:
+    name: fupi

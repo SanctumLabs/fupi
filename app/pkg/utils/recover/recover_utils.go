@@ -10,7 +10,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 // PanicHandlerOption represents an option for configuring panic handlers

@@ -13,9 +13,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	repository "github.com/sanctumlabs/curtz/app/internal/core/ports/repository"
-	identity "github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	common "github.com/sanctumlabs/curtz/app/internal/pkg/common"
+	repository "github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
+	identity "github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	common "github.com/sanctumlabs/fupi/app/internal/pkg/common"
 	gomock "go.uber.org/mock/gomock"
 )
 

@@ -1,0 +1,72 @@
+# The API container (see docs/LocalInfrastructure.md). One service per mode; both build the repository Dockerfile.
+#   app-ha      REDIS_ADDRESS lists all six cluster nodes; KAFKA_BROKERS the three brokers.
+#   app-single  REDIS_ADDRESS is the single node (it answers to the alias redis-1); KAFKA_BROKERS the single broker (alias kafka-1).
+# Kafka is optional for the API (ADR-0021), but without brokers every URLAccessed publish times out and is dropped.
+# The services declare no depends_on: a dependency in a profile that is not enabled makes `docker compose config` fail,
+# so scripts/infra.sh brings up and waits for Postgres and Redis first, and restart: unless-stopped covers a manual start.
+# The environment is an explicit list, not env_file: the app must not see the other stacks' admin passwords.
+x-app: &app
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  image: fupi-app:local
+  restart: unless-stopped
+  # longer than SHUTDOWN_TIMEOUT (15s) plus the 5s telemetry flush, so a stop never kills a drain or the final export
+  stop_grace_period: 25s
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  ports: ["127.0.0.1:8085:8085"]
+  networks:
+    fupi:
+      aliases: [fupi-app]
+
+x-app-env: &app-env
+  ENVIRONMENT: development
+  HTTP_PORT: "8085"
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ${PG_DATABASE:-fupidb}
+  DATABASE_USERNAME: ${PG_APP_USER:-fupi-user}
+  DATABASE_PASSWORD: ${PG_APP_PASSWORD:-fupi-pass}
+  REDIS_USERNAME: ${REDIS_USERNAME:-fupi-svc}
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-fupi-svc}
+  AUTH_SECRET: ${AUTH_SECRET:-fupi-secret}
+  SHORT_CODE_KEY: ${SHORT_CODE_KEY:-fupi-short-code-key-for-development-only}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_SERVICE_NAME: fupi
+  # the rate limiter is on unless a run (make loadtest.stress) turns it off
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  # budgets (max requests per window in seconds); the defaults match .env.example, which scripts/infra_env_check.sh enforces
+  RATE_LIMIT_AUTH_MAX: ${RATE_LIMIT_AUTH_MAX:-10}
+  RATE_LIMIT_AUTH_WINDOW: ${RATE_LIMIT_AUTH_WINDOW:-60}
+  RATE_LIMIT_CREATE_MAX: ${RATE_LIMIT_CREATE_MAX:-30}
+  RATE_LIMIT_CREATE_WINDOW: ${RATE_LIMIT_CREATE_WINDOW:-60}
+  RATE_LIMIT_REDIRECT_MAX: ${RATE_LIMIT_REDIRECT_MAX:-300}
+  RATE_LIMIT_REDIRECT_WINDOW: ${RATE_LIMIT_REDIRECT_WINDOW:-60}
+  RATE_LIMIT_DEFAULT_MAX: ${RATE_LIMIT_DEFAULT_MAX:-100}
+  RATE_LIMIT_DEFAULT_WINDOW: ${RATE_LIMIT_DEFAULT_WINDOW:-60}
+  RATE_LIMIT_REDIS_TIMEOUT_MS: ${RATE_LIMIT_REDIS_TIMEOUT_MS:-50}
+  RATE_LIMIT_REDIS_RETRY_AFTER: ${RATE_LIMIT_REDIS_RETRY_AFTER:-5}
+
+services:
+  app-ha:
+    <<: *app
+    profiles: [app-ha]
+    environment:
+      <<: *app-env
+      REDIS_ADDRESS: redis-1:7001,redis-2:7002,redis-3:7003,redis-4:7004,redis-5:7005,redis-6:7006
+      KAFKA_BROKERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+
+  app-single:
+    <<: *app
+    profiles: [app-single]
+    environment:
+      <<: *app-env
+      REDIS_ADDRESS: redis-1:7001
+      KAFKA_BROKERS: kafka-1:9092
+
+networks:
+  fupi:
+    name: fupi

@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/google/wire"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/tracing"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/tracing"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -52,7 +52,7 @@ func New(cfg *LogConfig) Logger {
 	if cfg.Level != "" {
 		levelFromEnv, err := zapcore.ParseLevel(cfg.Level)
 		if err != nil {
-			log.Println(fmt.Errorf("Invalid level %s provided, defaulting to INFO: %w", cfg.Level, err))
+			log.Println(fmt.Errorf("invalid level %s provided, defaulting to INFO: %w", cfg.Level, err))
 		}
 
 		level = levelFromEnv
@@ -95,9 +95,8 @@ func New(cfg *LogConfig) Logger {
 	config := zap.Config{
 		Level:             logLevel,
 		Development:       cfg.Development,
-		DisableCaller:     cfg.EnableCaller,
-		DisableStacktrace: cfg.EnableStackTrace,
-		Sampling:          &zap.SamplingConfig{},
+		DisableCaller:     !cfg.EnableCaller,
+		DisableStacktrace: !cfg.EnableStackTrace,
 		Encoding:          cfg.Format,
 		EncoderConfig:     defaultEncodingConfig,
 		OutputPaths: []string{
@@ -146,7 +145,7 @@ func (l *appLogger) WithContext(ctx context.Context, args ...interface{}) Logger
 
 // WithoutCaller returns a logger that does not output the caller field and location of the calling code.
 func (l *appLogger) WithoutCaller() Logger {
-	return &appLogger{l.SugaredLogger.WithOptions(zap.WithCaller(false))}
+	return &appLogger{l.WithOptions(zap.WithCaller(false))}
 }
 
 // FromContext returns a logger from context. If none found, instantiate a new logger.

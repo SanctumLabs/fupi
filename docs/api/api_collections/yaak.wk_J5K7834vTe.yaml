@@ -1,0 +1,19 @@
+type: workspace
+model: workspace
+id: wk_J5K7834vTe
+createdAt: 2026-10-08T15:59:02.316386
+updatedAt: 2026-10-08T15:59:03.854182
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: Fupi API
+encryptionKeyChallenge: eUE0azNuQwF2m4K154VZCCgj40vUFVZkm8ztUuqqdjbA4FMrG500KsOkFPU8ZcXyJD5gWlatNvadSza6fXlDBk43B4LHZBOZ3F6KXP6d2eA+Ab+Gz5nZKZGJax80GqP6zAY=
+settingValidateCertificates: true
+settingFollowRedirects: true
+settingRequestTimeout: 0
+settingRequestMessageSize: 67108864
+settingDnsOverrides: []
+settingSendCookies: true
+settingStoreCookies: true
+settingHttpVersion: auto

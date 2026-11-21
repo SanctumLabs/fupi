@@ -1,0 +1,32 @@
+{
+  "uid": "fupi-worker",
+  "title": "Fupi worker",
+  "tags": [
+    "fupi"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {"id":1,"type":"stat","title":"Active relays","gridPos":{"x":0,"y":0,"w":6,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum(outbox_relay_leader{service_name=\"fupi-worker\"})","legendFormat":""}]},
+    {"id":2,"type":"stat","title":"Waiting for delivery","gridPos":{"x":6,"y":0,"w":6,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"max(outbox_relay_backlog{service_name=\"fupi-worker\"})","legendFormat":""}]},
+    {"id":3,"type":"stat","title":"Oldest waiting event","gridPos":{"x":12,"y":0,"w":6,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"max(outbox_relay_oldest_unsent_age_seconds{service_name=\"fupi-worker\"})","legendFormat":""}],"fieldConfig":{"defaults":{"unit":"s"},"overrides":[]}},
+    {"id":4,"type":"stat","title":"Parked events","gridPos":{"x":18,"y":0,"w":6,"h":4},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"max(outbox_relay_parked_rows{service_name=\"fupi-worker\"})","legendFormat":""}]},
+    {"id":5,"type":"timeseries","title":"Events published per second","gridPos":{"x":0,"y":4,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum by (destination) (rate(outbox_relay_published_total{service_name=\"fupi-worker\"}[5m]))","legendFormat":"{{destination}}"}],"fieldConfig":{"defaults":{"unit":"ops"},"overrides":[]}},
+    {"id":6,"type":"timeseries","title":"Failed records per second","gridPos":{"x":12,"y":4,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"sum by (kind) (rate(outbox_relay_failures_total{service_name=\"fupi-worker\"}[5m]))","legendFormat":"{{kind}}"}],"fieldConfig":{"defaults":{"unit":"ops"},"overrides":[]}},
+    {"id":7,"type":"timeseries","title":"Batch publish time p99","gridPos":{"x":0,"y":12,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"refId":"A","expr":"histogram_quantile(0.99, sum by (le) (rate(outbox_relay_publish_duration_seconds_bucket{service_name=\"fupi-worker\"}[5m])))","legendFormat":"p99"}],"fieldConfig":{"defaults":{"unit":"s"},"overrides":[]}},
+    {"id":8,"type":"logs","title":"Worker logs (Elasticsearch)","gridPos":{"x":0,"y":20,"w":24,"h":9},"datasource":{"type":"elasticsearch","uid":"elasticsearch"},"targets":[{"refId":"A","query":"service.name:fupi-worker","timeField":"@timestamp","metrics":[{"type":"logs","id":"1","settings":{"limit":"100"}}],"bucketAggs":[]}]},
+    {"id":9,"type":"table","title":"Recent traces (Tempo)","gridPos":{"x":0,"y":29,"w":24,"h":9},"datasource":{"type":"tempo","uid":"tempo"},"targets":[{"refId":"A","queryType":"traceql","query":"{ resource.service.name = \"fupi-worker\" }","limit":20}]}
+  ]
+}

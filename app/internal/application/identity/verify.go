@@ -6,16 +6,19 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 )
 
 // VerifyEmail completes email verification for the given token, activating the user.
 //
 // An unknown token is reported as an invalid token rather than "not found": to a caller holding a
 // bad link, the two are the same thing, and distinguishing them leaks which tokens exist.
-func (svc *Service) VerifyEmail(ctx context.Context, token string) (identity.User, error) {
+func (svc *Service) VerifyEmail(ctx context.Context, token string) (_ identity.User, err error) {
+	ctx, span := svc.startUseCase(ctx, "VerifyEmail")
+	defer func() { endUseCase(span, err) }()
+
 	handlerLogPrefix := fmt.Sprintf("%s<VerifyEmail>", svc.logPrefix)
 
 	if token == "" {

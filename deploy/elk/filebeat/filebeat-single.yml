@@ -1,0 +1,29 @@
+filebeat.inputs:
+  # Filebeat 9 dropped the container input: read the Docker json logs with filestream and its container parser.
+  - type: filestream
+    id: docker-container-logs
+    paths:
+      - /var/lib/docker/containers/*/*.log
+    parsers:
+      - container:
+          stream: all
+
+processors:
+  - add_docker_metadata:
+      host: "unix:///var/run/docker.sock"
+      labels.dedot: true
+  # Only this compose project's containers, and never Filebeat's own output (it would feed back into itself).
+  - drop_event:
+      when:
+        not:
+          equals:
+            container.labels.com_docker_compose_project: fupi
+  - drop_event:
+      when:
+        contains:
+          container.name: filebeat
+
+output.logstash:
+  hosts: ["logstash-1:5044"]
+
+logging.level: warning

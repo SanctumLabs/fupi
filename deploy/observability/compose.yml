@@ -1,0 +1,98 @@
+# Observability: the OTel Collector receives OTLP from the app and fans out (traces -> Tempo, metrics -> a Prometheus
+# endpoint). Prometheus scrapes the Collector and every exporter; Alertmanager receives alerts; Grafana (added in the
+# next task) reads Prometheus, Tempo and Elasticsearch. Logs go to ELK, not through the Collector.
+# Single instance in every mode: production HA for these (Thanos/Mimir, replicated Grafana) is not emulated.
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    profiles: [observability, full-ha, full-single]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    networks:
+      - fupi
+
+  tempo:
+    image: grafana/tempo:3.1.0
+    profiles: [observability, full-ha, full-single]
+    restart: unless-stopped
+    command: ["-target=all", "-config.file=/etc/tempo.yaml"]
+    ports:
+      - "127.0.0.1:3200:3200"
+    volumes:
+      - ./tempo.yml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    networks:
+      - fupi
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    profiles: [observability, full-ha, full-single]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    networks:
+      - fupi
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    profiles: [observability, full-ha, full-single]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - fupi
+
+  grafana:
+    image: grafana/grafana:13.2.3
+    profiles: [observability, full-ha, full-single]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-fupi-grafana-dev}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GRAFANA_READER_PASSWORD: ${GRAFANA_READER_PASSWORD:-fupi-grafana-reader}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - fupi
+
+volumes:
+  tempo-data:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+
+networks:
+  fupi:
+    name: fupi

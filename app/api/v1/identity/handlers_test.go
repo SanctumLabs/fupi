@@ -10,20 +10,20 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	identityapp "github.com/sanctumlabs/curtz/app/internal/application/identity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	mockidentity "github.com/sanctumlabs/curtz/app/internal/domain/identity/mocks"
-	mockports "github.com/sanctumlabs/curtz/app/internal/ports/mocks"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/server/router"
-	"github.com/sanctumlabs/curtz/app/pkg/utils"
+	identityapp "github.com/sanctumlabs/fupi/app/internal/application/identity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	mockidentity "github.com/sanctumlabs/fupi/app/internal/domain/identity/mocks"
+	mockports "github.com/sanctumlabs/fupi/app/internal/ports/mocks"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/server/router"
+	"github.com/sanctumlabs/fupi/app/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 )
 
-const baseURI = "/api/v1/curtz"
+const baseURI = "/api/v1/fupi"
 
 type IdentityHandlersTestSuite struct {
 	suite.Suite
@@ -91,7 +91,7 @@ func (suite *IdentityHandlersTestSuite) registeredUser(password string) *identit
 		Username:     "johndoe",
 		FirstName:    "John",
 		LastName:     "Doe",
-		Email:        "john.doe@curtz.com",
+		Email:        "john.doe@fupi.com",
 		PasswordHash: hash,
 	})
 	suite.Require().NoError(err)
@@ -108,11 +108,11 @@ func (suite *IdentityHandlersTestSuite) TestRegister_Returns201WithUserBody() {
 	suite.mockNotifier.EXPECT().SendEmailVerification(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	_, status, body := suite.do("POST", baseURI+"/auth/register",
-		`{"username":"johndoe","first_name":"John","last_name":"Doe","email":"john.doe@curtz.com","password":"s3cret-password"}`)
+		`{"username":"johndoe","first_name":"John","last_name":"Doe","email":"john.doe@fupi.com","password":"s3cret-password"}`)
 
 	suite.Equal(fiber.StatusCreated, status)
 	suite.Equal("johndoe", body["username"])
-	suite.Equal("john.doe@curtz.com", body["email"])
+	suite.Equal("john.doe@fupi.com", body["email"])
 	suite.Equal(string(identity.UserStatusInactive), body["status"])
 	suite.Equal(false, body["verified"])
 	suite.NotEmpty(body["id"])
@@ -127,7 +127,7 @@ func (suite *IdentityHandlersTestSuite) TestRegister_ResponseLeaksNoSecrets() {
 	suite.mockNotifier.EXPECT().SendEmailVerification(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	_, _, body := suite.do("POST", baseURI+"/auth/register",
-		`{"username":"johndoe","first_name":"John","email":"john.doe@curtz.com","password":"s3cret-password"}`)
+		`{"username":"johndoe","first_name":"John","email":"john.doe@fupi.com","password":"s3cret-password"}`)
 
 	for _, forbidden := range []string{"password", "password_hash", "passwordHash", "verification_token", "token"} {
 		suite.NotContains(body, forbidden, "response must not expose %q", forbidden)
@@ -138,9 +138,9 @@ func (suite *IdentityHandlersTestSuite) TestRegister_Returns422ForMissingFields(
 	suite.mockUsers.EXPECT().Save(gomock.Any(), gomock.Any()).Times(0)
 
 	cases := map[string]string{
-		"missing username": `{"first_name":"John","email":"john.doe@curtz.com","password":"pw"}`,
+		"missing username": `{"first_name":"John","email":"john.doe@fupi.com","password":"pw"}`,
 		"missing email":    `{"username":"johndoe","first_name":"John","password":"pw"}`,
-		"missing password": `{"username":"johndoe","first_name":"John","email":"john.doe@curtz.com"}`,
+		"missing password": `{"username":"johndoe","first_name":"John","email":"john.doe@fupi.com"}`,
 		"empty body":       `{}`,
 	}
 
@@ -157,7 +157,7 @@ func (suite *IdentityHandlersTestSuite) TestRegister_Returns400ForMissingFirstNa
 	suite.mockUsers.EXPECT().Save(gomock.Any(), gomock.Any()).Times(0)
 
 	_, status, _ := suite.do("POST", baseURI+"/auth/register",
-		`{"username":"johndoe","email":"john.doe@curtz.com","password":"s3cret-password"}`)
+		`{"username":"johndoe","email":"john.doe@fupi.com","password":"s3cret-password"}`)
 	suite.Equal(fiber.StatusBadRequest, status)
 }
 
@@ -175,7 +175,7 @@ func (suite *IdentityHandlersTestSuite) TestRegister_Returns409ForDuplicateAccou
 		Times(1)
 
 	_, status, body := suite.do("POST", baseURI+"/auth/register",
-		`{"username":"johndoe","first_name":"John","email":"john.doe@curtz.com","password":"s3cret-password"}`)
+		`{"username":"johndoe","first_name":"John","email":"john.doe@fupi.com","password":"s3cret-password"}`)
 
 	suite.Equal(fiber.StatusConflict, status)
 	// the raw constraint text must not reach the client
@@ -197,17 +197,17 @@ func (suite *IdentityHandlersTestSuite) TestRegister_Returns400ForInvalidEmail()
 func (suite *IdentityHandlersTestSuite) TestLogin_Returns200WithTokens() {
 	user := suite.registeredUser("s3cret-password")
 
-	suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), "john.doe@curtz.com").Return(*user, nil).Times(1)
+	suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), "john.doe@fupi.com").Return(*user, nil).Times(1)
 	suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Return("access-token", nil).Times(1)
 	suite.mockTokens.EXPECT().GenerateRefreshToken(gomock.Any()).Return("refresh-token", nil).Times(1)
 
 	_, status, body := suite.do("POST", baseURI+"/auth/login",
-		`{"email":"john.doe@curtz.com","password":"s3cret-password"}`)
+		`{"email":"john.doe@fupi.com","password":"s3cret-password"}`)
 
 	suite.Require().Equal(fiber.StatusOK, status)
 	suite.Equal("access-token", body["access_token"])
 	suite.Equal("refresh-token", body["refresh_token"])
-	suite.Equal("john.doe@curtz.com", body["email"])
+	suite.Equal("john.doe@fupi.com", body["email"])
 	suite.NotContains(body, "password_hash")
 }
 
@@ -218,7 +218,7 @@ func (suite *IdentityHandlersTestSuite) TestLogin_Returns401ForWrongPassword() {
 	suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Times(0)
 
 	_, status, body := suite.do("POST", baseURI+"/auth/login",
-		`{"email":"john.doe@curtz.com","password":"the-wrong-password"}`)
+		`{"email":"john.doe@fupi.com","password":"the-wrong-password"}`)
 
 	suite.Equal(fiber.StatusUnauthorized, status)
 	suite.Contains(body["message"], "invalid email or password")
@@ -232,7 +232,7 @@ func (suite *IdentityHandlersTestSuite) TestLogin_Returns401ForUnknownEmail() {
 	suite.mockTokens.EXPECT().GenerateAccessToken(gomock.Any()).Times(0)
 
 	_, status, body := suite.do("POST", baseURI+"/auth/login",
-		`{"email":"nobody@curtz.com","password":"whatever"}`)
+		`{"email":"nobody@fupi.com","password":"whatever"}`)
 
 	suite.Equal(fiber.StatusUnauthorized, status)
 	suite.Contains(body["message"], "invalid email or password",
@@ -243,7 +243,7 @@ func (suite *IdentityHandlersTestSuite) TestLogin_Returns422ForMissingCredential
 	suite.mockUsers.EXPECT().FetchByEmail(gomock.Any(), gomock.Any()).Times(0)
 
 	for name, payload := range map[string]string{
-		"no password": `{"email":"john.doe@curtz.com"}`,
+		"no password": `{"email":"john.doe@fupi.com"}`,
 		"no email":    `{"password":"s3cret"}`,
 		"empty":       `{}`,
 	} {
@@ -304,7 +304,7 @@ func (suite *IdentityHandlersTestSuite) TestVerify_Returns200ForValidToken() {
 	verified, err := identity.NewUser(identity.UserParams{
 		Username:            user.Username(),
 		FirstName:           user.FirstName(),
-		Email:               "john.doe@curtz.com",
+		Email:               "john.doe@fupi.com",
 		Status:              identity.UserStatusActive,
 		VerificationToken:   token,
 		VerificationExpires: verification.Expires(),

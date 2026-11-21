@@ -1,8 +1,8 @@
 package identityapi
 
 import (
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
 )
 
 // toUserResponse maps a User aggregate onto the wire representation. The password hash and the

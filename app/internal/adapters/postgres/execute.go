@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	recoveryutils "github.com/sanctumlabs/fupi/app/pkg/utils/recover"
 )
 
 // TxExecutor runs fn with a querier bound to a transaction. In production it wraps

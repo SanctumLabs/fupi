@@ -1,11 +1,11 @@
 package utils
 
 import (
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
 	"golang.org/x/crypto/bcrypt"
 )
 
-//HashPassword hashes the user password
+// HashPassword hashes the user password
 func HashPassword(value string) (string, error) {
 	if value == "" {
 		return "", errdefs.ErrInvalidPasswordLen
@@ -22,7 +22,7 @@ func HashPassword(value string) (string, error) {
 	return string(hash), nil
 }
 
-//CompareHashAndPassword compares the password hash against the passed in password string
+// CompareHashAndPassword compares the password hash against the passed in password string
 func CompareHashAndPassword(hash, password string) (bool, error) {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	if err != nil {

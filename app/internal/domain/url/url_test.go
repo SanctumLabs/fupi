@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/entity"
+	"github.com/sanctumlabs/fupi/app/internal/core/entity"
 )
 
 func createValidURLParams() URLParams {

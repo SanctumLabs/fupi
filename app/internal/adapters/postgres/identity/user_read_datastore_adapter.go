@@ -8,14 +8,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	postgresrepo "github.com/sanctumlabs/curtz/app/internal/adapters/postgres"
-	postgresql "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/sql"
-	"github.com/sanctumlabs/curtz/app/internal/core/ports/repository"
-	"github.com/sanctumlabs/curtz/app/internal/domain/identity"
-	"github.com/sanctumlabs/curtz/app/internal/pkg/common"
-	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
-	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
+	postgresrepo "github.com/sanctumlabs/fupi/app/internal/adapters/postgres"
+	postgresql "github.com/sanctumlabs/fupi/app/internal/adapters/postgres/sql"
+	"github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
+	"github.com/sanctumlabs/fupi/app/internal/domain/identity"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
+	"github.com/sanctumlabs/fupi/app/pkg/errdefs"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database"
+	"github.com/sanctumlabs/fupi/app/pkg/infra/database/postgres"
 )
 
 func NewUserReadDatastoreAdapter(dbClient database.PostgresDatabaseClient, config database.Config) identity.UserReadDatastore {

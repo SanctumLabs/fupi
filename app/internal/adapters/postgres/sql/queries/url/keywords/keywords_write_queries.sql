@@ -21,3 +21,6 @@ WHERE id = $1 RETURNING *;
 
 -- name: QueryDeleteKeywordWithId :one
 DELETE FROM keywords WHERE id = $1 RETURNING *;
+
+-- name: QueryDeleteKeywordsByUrlId :exec
+DELETE FROM keywords WHERE url_id = $1;

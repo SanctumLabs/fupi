@@ -4,9 +4,10 @@ import "time"
 
 const (
 	TEST_POSTGRES_DATABASE_VERSION = "postgres:16.2-alpine"
-	TEST_DATABASE_NAME             = "curtz_database_test"
-	TEST_DATABASE_USERNAME         = "curtz_user"
-	TEST_DATABASE_PASSWORD         = "curtz_password"
+	TEST_KAFKA_IMAGE               = "apache/kafka:4.3.1"
+	TEST_DATABASE_NAME             = "fupi_database_test"
+	TEST_DATABASE_USERNAME         = "fupi_user"
+	TEST_DATABASE_PASSWORD         = "fupi_password"
 	TEST_DATABASE_SCHEMA           = "public"
 	TEST_DATABASE_STARTUP_TIMEOUT  = 5 * time.Second
 	TEST_DATABASE_MAX_CONNS        = 10

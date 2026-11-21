@@ -15,7 +15,7 @@ import (
 	time "time"
 
 	pgxpool "github.com/jackc/pgx/v5/pgxpool"
-	database "github.com/sanctumlabs/curtz/app/pkg/infra/database"
+	database "github.com/sanctumlabs/fupi/app/pkg/infra/database"
 	gomock "go.uber.org/mock/gomock"
 )
 

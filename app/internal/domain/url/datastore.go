@@ -4,7 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/sanctumlabs/curtz/app/internal/core/ports/repository"
+	"github.com/sanctumlabs/fupi/app/internal/core/ports/repository"
+	"github.com/sanctumlabs/fupi/app/internal/pkg/common"
 )
 
 type (
@@ -27,14 +28,19 @@ type (
 		// FetchByShortCode retrieves a URL entity by its short code
 		FetchByShortCode(ctx context.Context, shortCode string) (URL, error)
 
+		// FetchRedirectTarget retrieves what the redirect needs for a short code or, failing that, a custom alias,
+		// without the url's keywords. A short code wins over an alias of the same spelling.
+		FetchRedirectTarget(ctx context.Context, code string) (RedirectTarget, error)
+
 		// FetchByCustomAlias retrieves a URL entity by its custom alias
 		FetchByCustomAlias(ctx context.Context, customAlias string) (URL, error)
 
-		// FetchByUserId retrieves a list of URL entities by the user id of their owner
-		FetchByUserId(ctx context.Context, userId string) (repository.FetchRecordsResponse[URL], error)
+		// FetchByUserId retrieves a page of the URL entities owned by the user. Deleted URLs are never returned,
+		// whatever params.IncludeDeleted says; params.Status optionally narrows the page to one status.
+		FetchByUserId(ctx context.Context, userId string, params common.RequestParams) (repository.FetchRecordsResponse[URL], error)
 
-		// FetchByStatus retrieves a list of URL entities by their status
-		FetchByStatus(ctx context.Context, status URLStatus) (repository.FetchRecordsResponse[URL], error)
+		// FetchByStatus retrieves a page of the URL entities in the given status
+		FetchByStatus(ctx context.Context, status URLStatus, params common.RequestParams) (repository.FetchRecordsResponse[URL], error)
 
 		// FetchByOriginalUrl retrieves a URL entity by its original url
 		FetchByOriginalUrl(ctx context.Context, originalUrl string) (URL, error)
@@ -42,5 +48,9 @@ type (
 		// FetchExpiredActive retrieves up to limit ACTIVE URL entities whose expiry is before the given time.
 		// Used by the expiry background job to find URLs to transition to EXPIRED.
 		FetchExpiredActive(ctx context.Context, before time.Time, limit int) ([]URL, error)
+
+		// CountExpiredActive counts the ACTIVE URL entities whose expiry is before the given time: the expiry job's
+		// backlog.
+		CountExpiredActive(ctx context.Context, before time.Time) (int64, error)
 	}
 )

@@ -1,137 +1,253 @@
-//go:build legacy
-
-package url
+package urlapi
 
 import (
-	"fmt"
-	"net/http"
-
-	"github.com/gin-gonic/gin"
-	"github.com/sanctumlabs/curtz/app/internal/core/contracts"
-	"github.com/sanctumlabs/curtz/app/pkg/validators"
+	"github.com/gofiber/fiber/v2"
+	apimiddleware "github.com/sanctumlabs/fupi/app/api/middleware"
+	urlapp "github.com/sanctumlabs/fupi/app/internal/application/url"
 )
 
-// createShortUrl creates a new shortened url
-func (hdl *urlRouter) createShortUrl(c *gin.Context) {
-	payload := createShortUrlDto{}
-	err := c.BindJSON(&payload)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+// callerID returns the id of the authenticated caller the auth middleware put on the context.
+func callerID(ctx *fiber.Ctx) (string, bool) {
+	userID, ok := ctx.Locals(apimiddleware.UserIDContextKey).(string)
+	return userID, ok && userID != ""
+}
 
-	userId, ok := c.Get("userId")
+// create shortens a url for the caller.
+//
+// Create godoc
+// @Summary     Shorten a url
+// @Tags        urls
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       request body urlapi.createUrlRequestDto true "the url to shorten"
+// @Success     201 {object} urlapi.urlResponseDto
+// @Failure     400 {object} urlapi.errorResponseDto
+// @Failure     409 {object} urlapi.errorResponseDto
+// @Failure     422 {object} urlapi.errorResponseDto
+// @Router      /api/v1/fupi/urls [post]
+func (rtr *urlRouter) create(ctx *fiber.Ctx) error {
+	userID, ok := callerID(ctx)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
+		return ctx.SendStatus(fiber.StatusUnauthorized)
 	}
 
-	if err := validators.IsValidUrl(payload.OriginalUrl); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	var request createUrlRequestDto
+	if err := ctx.BodyParser(&request); err != nil {
+		return respondBodyError(ctx, err)
+	}
+	if request.OriginalUrl == "" || request.ExpiresOn == nil {
+		return respondValidationError(ctx, "original_url and expires_on are required")
 	}
 
-	uid := userId.(string)
-	url, err := hdl.urlWriteSvc.CreateUrl(uid, payload.OriginalUrl, payload.CustomAlias, payload.ExpiresOn, payload.Keywords)
-
+	created, err := rtr.svc.Shorten(ctx.UserContext(), urlapp.ShortenCommand{
+		UserID:      userID,
+		OriginalURL: request.OriginalUrl,
+		CustomAlias: request.CustomAlias,
+		ExpiresOn:   *request.ExpiresOn,
+		Keywords:    request.Keywords,
+	})
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return respondError(ctx, err)
 	}
 
-	response := mapEntityToResponseDto(url)
-	c.JSON(http.StatusCreated, response)
+	return ctx.Status(fiber.StatusCreated).JSON(toUrlResponse(rtr.shortBaseURL, created))
 }
 
-// getUrlById returns a url that is attached to a user
-func (hdl *urlRouter) getUrlById(c *gin.Context) {
-	urlId := c.Param("id")
-
-	url, err := hdl.urlReadSvc.GetById(urlId)
-
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	response := mapEntityToResponseDto(url)
-
-	c.JSON(http.StatusOK, response)
-}
-
-func (hdl *urlRouter) getAllUrls(c *gin.Context) {
-	userId, ok := c.Get("userId")
+// list returns a page of the caller's urls.
+//
+// List godoc
+// @Summary     List the caller's urls
+// @Tags        urls
+// @Produce     json
+// @Security    BearerAuth
+// @Param       page       query int    false "page number, from 1"          default(1)   minimum(1)
+// @Param       size       query int    false "page size"                    default(100) minimum(1) maximum(100)
+// @Param       order_by   query string false "field to order by"            Enums(created_at, updated_at)
+// @Param       sort_order query string false "sort direction"               Enums(ASC, DESC)
+// @Param       status     query string false "only urls in this status"     Enums(ACTIVE, EXPIRED, SUSPENDED)
+// @Success     200 {object} urlapi.urlListResponseDto
+// @Failure     422 {object} urlapi.errorResponseDto
+// @Router      /api/v1/fupi/urls [get]
+func (rtr *urlRouter) list(ctx *fiber.Ctx) error {
+	userID, ok := callerID(ctx)
 	if !ok {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
+		return ctx.SendStatus(fiber.StatusUnauthorized)
 	}
 
-	uid := userId.(string)
-	urls, err := hdl.urlReadSvc.GetByUserId(uid)
+	params, paramsErr := parseListParams(ctx)
+	if paramsErr != nil {
+		return respondValidationError(ctx, paramsErr.Error())
+	}
+
+	page, err := rtr.svc.List(ctx.UserContext(), userID, params)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return respondError(ctx, err)
 	}
 
-	response := []urlResponseDto{}
-	for _, url := range urls {
-		response = append(response, mapEntityToResponseDto(url))
+	records := make([]urlResponseDto, 0, len(page.Records))
+	for _, record := range page.Records {
+		records = append(records, toUrlResponse(rtr.shortBaseURL, record))
 	}
 
-	c.JSON(http.StatusOK, response)
+	return ctx.Status(fiber.StatusOK).JSON(urlListResponseDto{
+		Records: records,
+		Total:   page.Total,
+		Page:    page.Page,
+		Size:    page.Size,
+	})
 }
 
-func (hdl *urlRouter) deleteUrl(c *gin.Context) {
-	urlId := c.Param("id")
-
-	err := hdl.urlWriteSvc.Remove(urlId)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Url with ID %s has been deleted", urlId)})
-}
-
-// updateUrl is a handler to update an existing short url
-func (hdl *urlRouter) updateUrl(c *gin.Context) {
-	userId, ok := c.Get("userId")
+// get returns one of the caller's urls.
+//
+// Get godoc
+// @Summary     Get one of the caller's urls
+// @Tags        urls
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id path string true "url id"
+// @Success     200 {object} urlapi.urlResponseDto
+// @Failure     404 {object} urlapi.errorResponseDto
+// @Router      /api/v1/fupi/urls/{id} [get]
+func (rtr *urlRouter) get(ctx *fiber.Ctx) error {
+	userID, ok := callerID(ctx)
 	if !ok {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
+		return ctx.SendStatus(fiber.StatusUnauthorized)
 	}
 
-	urlId := c.Param("id")
-
-	if _, err := hdl.urlReadSvc.GetById(urlId); err != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, map[string]any{"message": err.Error()})
-		return
-	}
-
-	payload := updateShortUrlDto{}
-	err := c.BindJSON(&payload)
+	found, err := rtr.svc.Get(ctx.UserContext(), userID, ctx.Params("id"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return respondError(ctx, err)
 	}
 
-	customAlias := payload.CustomAlias
-	keywords := payload.Keywords
-	expiresOn := payload.ExpiresOn
+	return ctx.Status(fiber.StatusOK).JSON(toUrlResponse(rtr.shortBaseURL, found))
+}
 
-	updateCmd, err := contracts.NewUpdateUrlRequest(userId.(string), urlId, customAlias, keywords, expiresOn)
+// update changes the expiry and/or the keywords of one of the caller's urls.
+//
+// Update godoc
+// @Summary     Change the expiry or keywords of one of the caller's urls
+// @Tags        urls
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id path string true "url id"
+// @Param       request body urlapi.updateUrlRequestDto true "the fields to change"
+// @Success     200 {object} urlapi.urlResponseDto
+// @Failure     400 {object} urlapi.errorResponseDto
+// @Failure     404 {object} urlapi.errorResponseDto
+// @Failure     409 {object} urlapi.errorResponseDto
+// @Failure     422 {object} urlapi.errorResponseDto
+// @Router      /api/v1/fupi/urls/{id} [patch]
+func (rtr *urlRouter) update(ctx *fiber.Ctx) error {
+	userID, ok := callerID(ctx)
+	if !ok {
+		return ctx.SendStatus(fiber.StatusUnauthorized)
+	}
+
+	var request updateUrlRequestDto
+	if err := ctx.BodyParser(&request); err != nil {
+		return respondBodyError(ctx, err)
+	}
+	if request.ExpiresOn == nil && request.Keywords == nil {
+		return respondValidationError(ctx, "expires_on or keywords is required")
+	}
+
+	updated, err := rtr.svc.Update(ctx.UserContext(), urlapp.UpdateCommand{
+		UserID:    userID,
+		ID:        ctx.Params("id"),
+		ExpiresOn: request.ExpiresOn,
+		Keywords:  request.Keywords,
+	})
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, map[string]any{"message": err.Error()})
-		return
+		return respondError(ctx, err)
 	}
 
-	updatedUrl, err := hdl.urlWriteSvc.UpdateUrl(updateCmd)
+	return ctx.Status(fiber.StatusOK).JSON(toUrlResponse(rtr.shortBaseURL, updated))
+}
+
+// delete deletes one of the caller's urls. It stops redirecting at once.
+//
+// Delete godoc
+// @Summary     Delete one of the caller's urls
+// @Tags        urls
+// @Security    BearerAuth
+// @Param       id path string true "url id"
+// @Success     204
+// @Failure     404 {object} urlapi.errorResponseDto
+// @Router      /api/v1/fupi/urls/{id} [delete]
+func (rtr *urlRouter) delete(ctx *fiber.Ctx) error {
+	userID, ok := callerID(ctx)
+	if !ok {
+		return ctx.SendStatus(fiber.StatusUnauthorized)
+	}
+
+	if err := rtr.svc.Delete(ctx.UserContext(), userID, ctx.Params("id")); err != nil {
+		return respondError(ctx, err)
+	}
+
+	return ctx.SendStatus(fiber.StatusNoContent)
+}
+
+// reinstate puts a suspended url back to ACTIVE. Only admins may; the role is checked against the datastore on every
+// call, never read from the token (ADR-0022).
+//
+// Reinstate godoc
+// @Summary     Reinstate a suspended url (admin only)
+// @Tags        urls
+// @Security    BearerAuth
+// @Param       id path string true "url id"
+// @Success     204
+// @Failure     401
+// @Failure     403 {object} urlapi.errorResponseDto
+// @Failure     404 {object} urlapi.errorResponseDto
+// @Failure     409 {object} urlapi.errorResponseDto
+// @Router      /api/v1/fupi/urls/{id}/reinstate [post]
+func (rtr *urlRouter) reinstate(ctx *fiber.Ctx) error {
+	userID, ok := callerID(ctx)
+	if !ok {
+		return ctx.SendStatus(fiber.StatusUnauthorized)
+	}
+
+	isAdmin, adminErr := rtr.admins.IsAdmin(ctx.UserContext(), userID)
+	if adminErr != nil {
+		return respondError(ctx, adminErr)
+	}
+	if !isAdmin {
+		return ctx.Status(fiber.StatusForbidden).JSON(errorResponseDto{Message: "forbidden"})
+	}
+
+	if err := rtr.svc.Reinstate(ctx.UserContext(), ctx.Params("id")); err != nil {
+		return respondError(ctx, err)
+	}
+
+	return ctx.SendStatus(fiber.StatusNoContent)
+}
+
+// redirect sends the visitor of a short url to its target. It is public.
+//
+// Redirect godoc
+// @Summary     Follow a short url
+// @Tags        redirect
+// @Param       code path string true "short code or custom alias"
+// @Success     302 "redirects to the original url"
+// @Failure     404 {object} urlapi.errorResponseDto
+// @Router      /{code} [get]
+//
+// A 302 rather than a 301: a permanent redirect is cached by browsers indefinitely, so a url that is later deleted,
+// expired or suspended would keep redirecting.
+func (rtr *urlRouter) redirect(ctx *fiber.Ctx) error {
+	target, err := rtr.svc.Resolve(ctx.UserContext(), ctx.Params("code"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
+		return respondError(ctx, err)
 	}
 
-	response := mapEntityToResponseDto(updatedUrl)
+	rtr.svc.RecordAccess(urlapp.Access{
+		ShortCode: ctx.Params("code"),
+		IP:        ctx.IP(),
+		UserAgent: ctx.Get(fiber.HeaderUserAgent),
+		Referer:   ctx.Get(fiber.HeaderReferer),
+	})
 
-	c.JSON(http.StatusAccepted, response)
+	return ctx.Redirect(target.Value(), fiber.StatusFound)
 }

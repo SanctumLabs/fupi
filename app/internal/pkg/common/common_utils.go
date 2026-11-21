@@ -14,14 +14,14 @@ func GetDateRangeDescription(filter RequestParamsDateRangeOption) string {
 	desc.WriteString("Date filter: ")
 
 	if !filter.StartDate.IsZero() {
-		desc.WriteString(fmt.Sprintf("from %s", filter.StartDate.Format("2006-01-02")))
+		fmt.Fprintf(&desc, "from %s", filter.StartDate.Format("2006-01-02"))
 	}
 
 	if !filter.EndDate.IsZero() {
 		if !filter.StartDate.IsZero() {
 			desc.WriteString(" ")
 		}
-		desc.WriteString(fmt.Sprintf("to %s", filter.EndDate.Format("2006-01-02")))
+		fmt.Fprintf(&desc, "to %s", filter.EndDate.Format("2006-01-02"))
 	}
 
 	return desc.String()
