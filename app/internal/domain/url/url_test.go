@@ -65,6 +65,14 @@ var urlTestCases = []urlTestCase{
 		}(),
 	},
 	{
+		name: "invalid keyword should return error",
+		params: func() URLParams {
+			p := createValidURLParams()
+			p.Keywords = []string{"ok", "not ok"}
+			return p
+		}(),
+	},
+	{
 		name: "invalid short code should return error",
 		params: func() URLParams {
 			p := createValidURLParams()
@@ -88,6 +96,27 @@ var urlTestCases = []urlTestCase{
 			return p
 		}(),
 	},
+}
+
+func TestNewUrl_NoCustomAlias(t *testing.T) {
+	p := createValidURLParams()
+	p.CustomAlias = ""
+	url, err := NewUrl(p)
+	if err != nil {
+		t.Fatalf("NewUrl() without custom alias returned error: %v", err)
+	}
+	if !url.CustomAlias().IsZero() {
+		t.Errorf("expected zero custom alias, got %q", url.CustomAlias().Value())
+	}
+}
+
+func TestNewUrl_HydratesExpiredUrlWithPastExpiry(t *testing.T) {
+	p := createValidURLParams()
+	p.ExpiresOn = time.Now().Add(-24 * time.Hour)
+	p.Status = URLStatusExpired
+	if _, err := NewUrl(p); err != nil {
+		t.Fatalf("NewUrl() should hydrate an expired url, got error: %v", err)
+	}
 }
 
 func TestNewUrl(t *testing.T) {
@@ -122,12 +151,26 @@ func TestURL_IsActive(t *testing.T) {
 	tests := []struct {
 		name      string
 		expiresOn time.Time
+		status    URLStatus
 		expected  bool
 	}{
 		{
-			name:      "URL with future expiration should be active",
+			name:      "ACTIVE URL with future expiration should be active",
 			expiresOn: time.Now().Add(24 * time.Hour),
+			status:    URLStatusActive,
 			expected:  true,
+		},
+		{
+			name:      "ACTIVE URL with past expiration should not be active",
+			expiresOn: time.Now().Add(-24 * time.Hour),
+			status:    URLStatusActive,
+			expected:  false,
+		},
+		{
+			name:      "SUSPENDED URL with future expiration should not be active",
+			expiresOn: time.Now().Add(24 * time.Hour),
+			status:    URLStatusSuspended,
+			expected:  false,
 		},
 	}
 
@@ -135,6 +178,7 @@ func TestURL_IsActive(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			params := createValidURLParams()
 			params.ExpiresOn = tt.expiresOn
+			params.Status = tt.status
 			url, err := NewUrl(params)
 			if err != nil {
 				t.Fatalf("Failed to create URL: %v", err)

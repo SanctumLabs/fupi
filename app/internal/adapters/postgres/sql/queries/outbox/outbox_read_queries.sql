@@ -2,7 +2,7 @@
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 -- Date range filtering
 AND (
   sqlc.narg(date_field)::text IS NULL
@@ -39,7 +39,7 @@ WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL;
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND oe.group_id = sqlc.arg(group_id)
 -- Date range filtering
 AND (
@@ -83,7 +83,7 @@ WHERE oe.id = $1;
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND oe.destination = $1
 -- Date range filtering
 AND (
@@ -115,7 +115,7 @@ OFFSET sqlc.arg(current_offset);
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND oe.event_type = $1
 -- Date range filtering
 AND (
@@ -147,7 +147,7 @@ OFFSET sqlc.arg(current_offset);
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND oe.sent_time IS NULL
 -- Safely check for failure_reason
 AND (oe.metadata IS NULL OR oe.metadata::text = 'null' OR (oe.metadata ->> 'failure_reason') IS NULL)
@@ -186,7 +186,7 @@ OFFSET sqlc.arg(current_offset);
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND sqlc.arg(destination) = oe.destination
 AND oe.sent_time IS NULL
 -- Safely check for failure_reason
@@ -227,7 +227,7 @@ FOR UPDATE SKIP LOCKED;
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND sqlc.arg(destination) = oe.destination
 AND oe.sent_time IS NULL
 -- Date range filtering
@@ -260,7 +260,7 @@ OFFSET sqlc.arg(current_offset);
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND oe.sent_time IS NOT NULL
 -- Date range filtering
 AND (
@@ -292,7 +292,7 @@ OFFSET sqlc.arg(current_offset);
 SELECT
   sqlc.embed(oe)
 FROM outbox_events oe
-WHERE sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR oe.deleted_at IS NULL)
 AND oe.sent_time IS NOT NULL
 -- Date range filtering
 AND (

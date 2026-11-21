@@ -9,7 +9,7 @@ SELECT
   sqlc.embed(wh)
 FROM webhooks wh
 WHERE wh.user_id = $1
-AND sqlc.arg(include_deleted)::bool OR wh.deleted_at IS NULL
+AND (sqlc.arg(include_deleted)::bool OR wh.deleted_at IS NULL)
   AND (COALESCE(sqlc.narg(active), '') = '' OR wh.active = sqlc.narg(active)::bool)
 -- Date range filtering
 AND (
@@ -50,7 +50,7 @@ SELECT
   sqlc.embed(wh),
   COUNT(*) OVER() AS total_records
 FROM webhooks wh 
-WHERE sqlc.arg(include_deleted)::bool OR wh.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR wh.deleted_at IS NULL)
   AND (COALESCE(sqlc.narg(active), '') = '' OR wh.active = sqlc.narg(active)::bool)
 -- Date range filtering
 AND (

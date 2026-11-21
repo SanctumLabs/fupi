@@ -8,9 +8,10 @@ WHERE us.id = $1;
 SELECT 
   sqlc.embed(us)
 FROM url_scans us
+JOIN urls u ON us.url_id = u.id
 WHERE us.provider = $1
-AND sqlc.arg(include_deleted)::bool OR us.deleted_at IS NULL
-  AND (COALESCE(sqlc.narg(url_status), '') = '' OR us.name = sqlc.narg(url_status))
+  AND (sqlc.arg(include_deleted)::bool OR us.deleted_at IS NULL)
+  AND (sqlc.narg(url_status)::url_status IS NULL OR u.status = sqlc.narg(url_status)::url_status)
 -- Date range filtering
 AND (
   sqlc.narg(date_field)::text IS NULL
@@ -49,9 +50,10 @@ OFFSET sqlc.arg(current_offset);
 SELECT 
   sqlc.embed(us),
   COUNT(*) OVER() AS total_records
-FROM url_scans us 
-WHERE sqlc.arg(include_deleted)::bool OR us.deleted_at IS NULL
-  AND (COALESCE(sqlc.narg(url_status), '') = '' OR us.name = sqlc.narg(url_status))
+FROM url_scans us
+JOIN urls u ON us.url_id = u.id
+WHERE (sqlc.arg(include_deleted)::bool OR us.deleted_at IS NULL)
+  AND (sqlc.narg(url_status)::url_status IS NULL OR u.status = sqlc.narg(url_status)::url_status)
 -- Date range filtering
 AND (
   sqlc.narg(date_field)::text IS NULL

@@ -27,7 +27,6 @@ DROP TRIGGER IF EXISTS audit_trigger_stm ON users;
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- Eventing context
-DROP TABLE IF EXISTS kafka_outbox_events;
 DROP TABLE IF EXISTS outbox_events;
 
 -- Security context (url_scans → urls)
@@ -36,15 +35,15 @@ DROP TABLE IF EXISTS url_scans;
 -- Notification context (webhooks → users, urls)
 DROP TABLE IF EXISTS webhooks;
 
--- URL context (keywords → urls; urls → users, url_status)
+-- URL context (keywords → urls; urls → users, url_status type)
 DROP TABLE IF EXISTS keywords;
 DROP TABLE IF EXISTS urls;
-DROP TABLE IF EXISTS url_status;
+DROP TYPE IF EXISTS url_status;
 
--- Identity context (api_keys → users; users → user_status)
+-- Identity context (api_keys → users; users → user_status type)
 DROP TABLE IF EXISTS api_keys;
 DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS user_status;
+DROP TYPE IF EXISTS user_status;
 
 -- Audit context (no FK dependencies from other tables; safe to drop last)
 DROP TABLE IF EXISTS audit_trail;

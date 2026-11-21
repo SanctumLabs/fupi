@@ -26,7 +26,7 @@ var customAliasTestCases = []customAliasTestCase{
 	},
 	{
 		name:  "custom alias too long should return error",
-		input: "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+		input: "abcdefghijklm",
 		err:   errdefs.ErrCustomAliasInvalidLength,
 	},
 	{
@@ -51,7 +51,12 @@ var customAliasTestCases = []customAliasTestCase{
 	},
 	{
 		name:  "valid custom alias with dashes and numbers should return no error",
-		input: "test-123-alias",
+		input: "test-123-al",
+		err:   nil,
+	},
+	{
+		name:  "custom alias at max length should return no error",
+		input: "abcdefghijkl",
 		err:   nil,
 	},
 }

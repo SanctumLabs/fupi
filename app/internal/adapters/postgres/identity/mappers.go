@@ -1,4 +1,4 @@
-package identityrepo
+package identitydatastore
 
 import (
 	"fmt"
@@ -11,15 +11,8 @@ import (
 	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
 )
 
-// UserMapperParams holds the parameters for mapping a postgresql.User model to an identity.User entity.
-type UserMapperParams struct {
-	UserModel postgresql.User
-	Status    string
-}
-
 // MapUserModelToEntity maps a postgresql.User model to an identity.User entity.
-func MapUserModelToEntity(params UserMapperParams) (identity.User, error) {
-	userModel := params.UserModel
+func MapUserModelToEntity(userModel postgresql.User) (identity.User, error) {
 	userId, userIdErr := postgres.UUIDToString(userModel.ID)
 	if userIdErr != nil {
 		return identity.User{}, fmt.Errorf("failed to parse id when mapping user %v with error %w", userModel.ID, userIdErr)
@@ -64,15 +57,16 @@ func MapUserModelToEntity(params UserMapperParams) (identity.User, error) {
 		FirstName:           userModel.FirstName.String,
 		LastName:            userModel.LastName.String,
 		Email:               userModel.Email,
-		Status:              identity.UserStatus(params.Status),
+		Status:              identity.UserStatus(userModel.Status),
 		VerificationToken:   userModel.VerificationToken.String,
 		VerificationExpires: userModel.VerificationExpires.Time,
 		Verified:            userModel.Verified,
+		PasswordHash:        userModel.PasswordHash,
 	}
 
 	userEntity, userEntityErr := identity.NewUser(userParams)
 	if userEntityErr != nil {
-		return identity.User{}, fmt.Errorf("failed to create user entity from model %v with error %w", params, userEntityErr)
+		return identity.User{}, fmt.Errorf("failed to create user entity from model %v with error %w", userModel, userEntityErr)
 	}
 
 	return *userEntity, nil

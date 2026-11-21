@@ -23,7 +23,7 @@ SELECT
   sqlc.embed(ak),
   COUNT(*) OVER() AS total_records
 FROM api_keys ak
-WHERE sqlc.arg(include_deleted)::bool OR ak.deleted_at IS NULL
+WHERE (sqlc.arg(include_deleted)::bool OR ak.deleted_at IS NULL)
 AND ak.user_id = $1
 -- Date range filtering
 AND (

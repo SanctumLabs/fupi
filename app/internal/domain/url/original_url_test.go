@@ -74,6 +74,16 @@ var originalURLTestCases = []originalURLTestCase{
 		input: "https://sub.example.com/path",
 		err:   nil,
 	},
+	{
+		name:  "localhost URL should be filtered",
+		input: "http://localhost:8080/path",
+		err:   errdefs.ErrFilteredURL,
+	},
+	{
+		name:  "shortener URL should be filtered",
+		input: "https://urlssh.xyz/abc123",
+		err:   errdefs.ErrFilteredURL,
+	},
 }
 
 func TestNewOriginalURL(t *testing.T) {

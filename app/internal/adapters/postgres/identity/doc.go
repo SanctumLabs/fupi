@@ -1,2 +1,2 @@
-// Package identityrepo contains postgres database implementation for the identity context
-package identityrepo
+// package identitydatastore contains postgres database implementation for the identity context
+package identitydatastore

@@ -20,6 +20,12 @@ sqlc.generate: ## generate SQLC code
 	sqlc generate -f sqlc.yaml
 	@echo "${GREEN} Done generating SQLC code ${NC}"
 
+.PHONY: sqlc.generate.docker
+sqlc.generate.docker: ## generate SQLC code using docker
+	@echo "${GREEN} Generating SQLC code ${NC}"
+	docker run --rm -v $(shell pwd):/src -w /src sqlc/sqlc generate -f sqlc.yaml
+	@echo "${GREEN} Done generating SQLC code ${NC}"
+
 .PHONY: migrate
 migrate: create.dockerenvfile ## Runs the migrations. Defaults to up, usage: make migrate MIGRATE_DIRECTION=down
 	@echo "${GREEN} >>>>> Running migrations from directory $(DATABASE_MIGRATION_PATH) ${NC}"

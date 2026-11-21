@@ -55,6 +55,22 @@ func DefaultTestDatabaseConfig() TestDatabaseConfig {
 	}
 }
 
+// DefaultPostgresDatabaseConfig returns a default PostgresDatabaseConfig for testing
+func DefaultPostgresDatabaseConfig(host, port, connectionString string) postgres.PostgresDatabaseConfig {
+	return postgres.PostgresDatabaseConfig{
+		Host:        host,
+		Username:    TEST_DATABASE_USERNAME,
+		Password:    TEST_DATABASE_PASSWORD,
+		Name:        TEST_DATABASE_NAME,
+		Port:        port,
+		Url:         connectionString,
+		Schema:      TEST_DATABASE_SCHEMA,
+		MaxConns:    TEST_DATABASE_MAX_CONNS,
+		MinConns:    TEST_DATABASE_MIN_CONNS,
+		ConnTimeout: TEST_DATABASE_CONN_TIMEOUT,
+	}
+}
+
 func TestPostgresDatabaseContainer(ctx context.Context, config TestDatabaseConfig) (*postgresTestContainer.PostgresContainer, error) {
 	if config.Version == "" {
 		config.Version = TEST_POSTGRES_DATABASE_VERSION
@@ -99,8 +115,8 @@ func TestPostgresDatabaseContainer(ctx context.Context, config TestDatabaseConfi
 	return dbContainer, nil
 }
 
-// TestPostgresDatabaseClient creates a test database client with connection pool
-func TestPostgresDatabaseClient(t *testing.T, ctx context.Context) database.PostgresDatabaseClient {
+// TestPostgresDatabaseClientHelper is a test helper that creates a test database client and runs migrations. It will fail the test immediately if any step fails.
+func TestPostgresDatabaseClientHelper(t *testing.T, ctx context.Context) database.PostgresDatabaseClient {
 	t.Helper()
 
 	testDatabase, err := TestPostgresDatabaseContainer(ctx, DefaultTestDatabaseConfig())
@@ -137,6 +153,59 @@ func TestPostgresDatabaseClient(t *testing.T, ctx context.Context) database.Post
 		t.Fatalf("failed to acquire mapped database port: %v", err)
 	}
 
+	if err := RunDatabaseMigration(ctx, connectionString); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	testDatabaseClient, err := postgres.NewPostgresClient(DefaultPostgresDatabaseConfig(host, mappedPort.Port(), connectionString))
+	if err != nil {
+		t.Fatalf("failed to connect to database at %s: %v", connectionString, err)
+	}
+
+	return testDatabaseClient
+}
+
+// TestPostgresDatabaseClient creates a test database client with default configuration
+func TestPostgresDatabaseClient(ctx context.Context) (database.PostgresDatabaseClient, error) {
+	testDatabase, err := TestPostgresDatabaseContainer(ctx, DefaultTestDatabaseConfig())
+	if err != nil {
+		return nil, fmt.Errorf("issue creating database container %s", err.Error())
+	}
+
+	connectionString, err := testDatabase.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire database connection string: %w", err)
+	}
+
+	if err := RunDatabaseMigration(ctx, connectionString); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	host, err := testDatabase.Host(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire database host: %w", err)
+	}
+
+	port, err := nat.NewPort("tcp", "5432")
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct postgres port: %w", err)
+	}
+
+	mappedPort, err := testDatabase.MappedPort(ctx, port.Port())
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire mapped database port: %w", err)
+	}
+
+	testDatabaseClient, err := TestDatabaseClient(ctx, DefaultPostgresDatabaseConfig(host, mappedPort.Port(), connectionString))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database at %s: %w", connectionString, err)
+	}
+
+	return testDatabaseClient, nil
+}
+
+// RunDatabaseMigration runs database migrations for a given connection string and migration path
+func RunDatabaseMigration(ctx context.Context, connectionString string) error {
 	migrationSourcePath := fmt.Sprintf("file://%s", migrationsDir())
 	slog.InfoContext(ctx, "running migrations",
 		slog.String("connectionString", connectionString),
@@ -144,25 +213,17 @@ func TestPostgresDatabaseClient(t *testing.T, ctx context.Context) database.Post
 	)
 
 	if err := postgres.Migrate(connectionString, migrationSourcePath, false); err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
+		return fmt.Errorf("failed to run migrations: %w", err)
 	}
+	return nil
+}
 
-	// TODO: pass in these configs as arguments to this function and default when zero values are detected
-	testDatabaseClient, err := postgres.NewPostgresClient(postgres.PostgresDatabaseConfig{
-		Host:        host,
-		Username:    TEST_DATABASE_USERNAME,
-		Password:    TEST_DATABASE_PASSWORD,
-		Name:        TEST_DATABASE_NAME,
-		Port:        mappedPort.Port(),
-		Url:         connectionString,
-		Schema:      TEST_DATABASE_SCHEMA,
-		MaxConns:    TEST_DATABASE_MAX_CONNS,
-		MinConns:    TEST_DATABASE_MIN_CONNS,
-		ConnTimeout: TEST_DATABASE_CONN_TIMEOUT,
-	})
+// TestDatabaseClient creates a test database client with default configuration
+func TestDatabaseClient(ctx context.Context, config postgres.PostgresDatabaseConfig) (database.PostgresDatabaseClient, error) {
+	testDatabaseClient, err := postgres.NewPostgresClient(config)
 	if err != nil {
-		t.Fatalf("failed to connect to database at %s: %v", connectionString, err)
+		return nil, fmt.Errorf("failed to connect to database with config %v: %w", config, err)
 	}
 
-	return testDatabaseClient
+	return testDatabaseClient, nil
 }

@@ -1,17 +1,50 @@
 package url
 
-import "time"
+import (
+	"time"
+
+	"github.com/sanctumlabs/curtz/app/internal/core/entity"
+)
+
+// SuspensionReason is why a URL was suspended by the Security context
+type SuspensionReason string
+
+const (
+	SuspensionReasonMalware  SuspensionReason = "malware"
+	SuspensionReasonPhishing SuspensionReason = "phishing"
+	SuspensionReasonSpam     SuspensionReason = "spam"
+)
+
+// baseEvent carries the fields every URL domain event shares and satisfies entity.DomainEvent
+type baseEvent struct {
+	id         string
+	eventType  string
+	occurredAt time.Time
+}
+
+func newBaseEvent(eventType string) baseEvent {
+	return baseEvent{
+		id:         entity.IDToString(entity.NewID()),
+		eventType:  eventType,
+		occurredAt: time.Now().UTC(),
+	}
+}
+
+func (e baseEvent) ID() string            { return e.id }
+func (e baseEvent) EventType() string     { return e.eventType }
+func (e baseEvent) OccurredAt() time.Time { return e.occurredAt }
 
 type URLCreated struct {
+	baseEvent
 	URLID       string
 	UserID      string
 	OriginalURL string
 	ShortCode   string
 	ExpiresOn   time.Time
-	OccurredAt  time.Time
 }
 
 type URLAccessed struct {
+	baseEvent
 	URLID       string
 	ShortCode   string
 	IPAddress   string
@@ -19,23 +52,28 @@ type URLAccessed struct {
 	Referer     string
 	CountryCode string // resolved by GeoIP before publishing
 	DeviceType  string // mobile | desktop | bot
-	OccurredAt  time.Time
 }
 
 type URLExpired struct {
-	URLID      string
-	ShortCode  string
-	OccurredAt time.Time
+	baseEvent
+	URLID     string
+	ShortCode string
 }
 
 type URLSuspended struct {
-	URLID      string
-	Reason     string // "malware" | "phishing" | "spam"
-	OccurredAt time.Time
+	baseEvent
+	URLID  string
+	Reason SuspensionReason
+}
+
+type URLReinstated struct {
+	baseEvent
+	URLID     string
+	ShortCode string
 }
 
 type URLDeleted struct {
-	URLID      string
-	ShortCode  string
-	OccurredAt time.Time
+	baseEvent
+	URLID     string
+	ShortCode string
 }

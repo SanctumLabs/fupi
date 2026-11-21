@@ -4,6 +4,10 @@ type causer interface {
 	Cause() error
 }
 
+type unwrapper interface {
+	Unwrap() error
+}
+
 func getImplementer(err error) error {
 	switch e := err.(type) {
 	case
@@ -23,6 +27,9 @@ func getImplementer(err error) error {
 		return err
 	case causer:
 		return getImplementer(e.Cause())
+	case unwrapper:
+		// follow standard fmt.Errorf("%w") wrapping so classification survives wrapping
+		return getImplementer(e.Unwrap())
 	default:
 		return err
 	}

@@ -1,36 +1,38 @@
 -- name: QueryUrlById :one
-SELECT 
-  sqlc.embed(u),
-  sqlc.embed(us)
+SELECT
+  sqlc.embed(u)
 FROM urls u
-JOIN url_status us ON u.status_id = us.id 
 WHERE u.id = $1;
 
 -- name: QueryUrlByUrlShortCode :one
-SELECT 
-  sqlc.embed(u), 
-  sqlc.embed(us) 
-FROM urls u 
-JOIN url_status us ON u.status_id = us.id
+SELECT
+  sqlc.embed(u)
+FROM urls u
 WHERE u.short_code = $1;
 
 -- name: QueryUrlByCustomAlias :one
-SELECT 
-  sqlc.embed(u), 
-  sqlc.embed(us) 
+SELECT
+  sqlc.embed(u)
 FROM urls u
-JOIN url_status us ON u.status_id = us.id
 WHERE u.custom_alias = $1;
 
+-- name: QueryExpiredActiveUrls :many
+SELECT
+  sqlc.embed(u)
+FROM urls u
+WHERE u.status = 'ACTIVE'
+  AND u.deleted_at IS NULL
+  AND u.expires_on < sqlc.arg(expires_before)
+ORDER BY u.expires_on ASC
+LIMIT sqlc.arg(limit_by);
+
 -- name: QueryAllUrls :many
-SELECT 
+SELECT
   sqlc.embed(u),
-  sqlc.embed(us),
   COUNT(*) OVER() AS total_records
-FROM urls u 
-JOIN url_status us ON u.status_id = us.id
-WHERE sqlc.arg(include_deleted)::bool OR u.deleted_at IS NULL
-  AND (COALESCE(sqlc.narg(url_status), '') = '' OR us.name = sqlc.narg(url_status))
+FROM urls u
+WHERE (sqlc.arg(include_deleted)::bool OR u.deleted_at IS NULL)
+  AND (sqlc.narg(url_status)::url_status IS NULL OR u.status = sqlc.narg(url_status)::url_status)
 -- Date range filtering
 AND (
   sqlc.narg(date_field)::text IS NULL
@@ -66,15 +68,13 @@ LIMIT sqlc.arg(limit_by)
 OFFSET sqlc.arg(current_offset);
 
 -- name: QueryAllUrlsByUserId :many
-SELECT 
+SELECT
   sqlc.embed(u),
-  sqlc.embed(us),
   COUNT(*) OVER() AS total_records
-FROM urls u 
-JOIN url_status us ON u.status_id = us.id
+FROM urls u
 WHERE u.user_id = $1
   AND (sqlc.arg(include_deleted)::bool OR u.deleted_at IS NULL)
-  AND (COALESCE(sqlc.narg(url_status), '') = '' OR us.name = sqlc.narg(url_status))
+  AND (sqlc.narg(url_status)::url_status IS NULL OR u.status = sqlc.narg(url_status)::url_status)
 -- Date range filtering
 AND (
   sqlc.narg(date_field)::text IS NULL

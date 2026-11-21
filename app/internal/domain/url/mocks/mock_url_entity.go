@@ -28,7 +28,8 @@ func MockUrl(mockUrlOption ...MockUrlOption) (*url.URL, error) {
 	keywords := []string{}
 
 	for range 3 {
-		keywords = append(keywords, faker.Word())
+		// two words, so a one-letter word such as "a" never falls below the keyword minimum length
+		keywords = append(keywords, faker.Word()+faker.Word())
 	}
 
 	ogTitle := faker.Word()

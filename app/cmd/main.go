@@ -1,222 +1,119 @@
-//go:build legacy
-
+// Command curtz runs the Curtz HTTP API.
+//
+// Only the Identity bounded context is wired up so far; the URL context follows once its
+// application layer exists.
 package main
 
 import (
-	"fmt"
-	"strconv"
+	"log/slog"
+	"os"
+	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/sanctumlabs/curtz/app/api/client"
-	"github.com/sanctumlabs/curtz/app/api/health"
-	authApi "github.com/sanctumlabs/curtz/app/api/v1/auth"
-	"github.com/sanctumlabs/curtz/app/api/v1/url"
+	apimiddleware "github.com/sanctumlabs/curtz/app/api/middleware"
+	identityapi "github.com/sanctumlabs/curtz/app/api/v1/identity"
 	"github.com/sanctumlabs/curtz/app/config"
-	cache "github.com/sanctumlabs/curtz/app/internal/adapters/redis"
-	"github.com/sanctumlabs/curtz/app/internal/core/urlsvc"
-	urlReadSvc "github.com/sanctumlabs/curtz/app/internal/core/urlsvc/read"
-	urlWriteSvc "github.com/sanctumlabs/curtz/app/internal/core/urlsvc/write"
-	"github.com/sanctumlabs/curtz/app/internal/core/usersvc"
-	"github.com/sanctumlabs/curtz/app/internal/repositories"
-	"github.com/sanctumlabs/curtz/app/internal/services/auth"
-	"github.com/sanctumlabs/curtz/app/internal/services/notifications"
-	"github.com/sanctumlabs/curtz/app/internal/services/notifications/email"
+	"github.com/sanctumlabs/curtz/app/internal/adapters/jwtauth"
+	"github.com/sanctumlabs/curtz/app/internal/adapters/notifications"
+	identitydatastore "github.com/sanctumlabs/curtz/app/internal/adapters/postgres/identity"
+	identityapp "github.com/sanctumlabs/curtz/app/internal/application/identity"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/database"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/env"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/server"
+	"github.com/sanctumlabs/curtz/app/pkg/infra/server/router"
 	"github.com/sanctumlabs/curtz/app/pkg/jwt"
-	"github.com/sanctumlabs/curtz/app/server"
-	"github.com/sanctumlabs/curtz/app/server/middleware"
-	"github.com/sanctumlabs/curtz/app/server/router"
-	"github.com/sanctumlabs/curtz/app/tools/env"
-	"github.com/sanctumlabs/curtz/app/tools/logger"
-	"github.com/sanctumlabs/curtz/app/tools/monitoring"
+	recoveryutils "github.com/sanctumlabs/curtz/app/pkg/utils/recover"
 )
 
-const (
-	Env                       = "ENV"
-	EnvDocsEnabled            = "DOCS_ENABLED"
-	EnvLogLevel               = "LOG_LEVEL"
-	EnvLogJsonOutput          = "LOG_JSON_OUTPUT"
-	EnvPort                   = "PORT"
-	EnvDatabaseHost           = "DATABASE_HOST"
-	EnvDatabase               = "DATABASE"
-	EnvDatabaseUsername       = "DATABASE_USERNAME"
-	EnvDatabasePassword       = "DATABASE_PASSWORD"
-	EnvDatabaseUsesSRV        = "DATABASE_USES_SRV"
-	EnvDatabasePort           = "DATABASE_PORT"
-	EnvAuthSecret             = "AUTH_SECRET"
-	EnvAuthExpireDelta        = "AUTH_EXPIRE_DELTA"
-	EnvAuthRefreshExpireDelta = "AUTH_REFRESH_EXPIRE_DELTA"
-	EnvAuthIssuer             = "AUTH_ISSUER"
-	EnvCacheHost              = "CACHE_HOST"
-	EnvCacheUsername          = "CACHE_USERNAME"
-	EnvCachePassword          = "CACHE_PASSWORD"
-	EnvCachePort              = "CACHE_PORT"
-	EnvCacheRequireAuth       = "CACHE_REQUIRE_AUTH"
-	EnvSentryDsn              = "SENTRY_DSN"
-	EnvSentryEnvironment      = "SENTRY_ENV"
-	EnvSentrySampleRate       = "SENTRY_SAMPLE_RATE"
-	EnvSentryEnabled          = "SENTRY_ENABLED"
-)
+const baseURI = "/api/v1/curtz"
 
 func main() {
-	log := logger.NewLogger("curtz-api")
-
-	err := godotenv.Load()
-	if err != nil {
-		log.Warn("Error loading .env file. Using defaults")
+	if err := godotenv.Load(); err != nil {
+		slog.Warn("no .env file found, relying on the environment", "error", err)
 	}
 
-	environment := env.EnvOr(Env, "development")
-	docsEnabled := env.EnvOr(EnvDocsEnabled, "true")
-	logLevel := env.EnvOr(EnvLogLevel, "debug")
-	logJsonOutput := env.EnvOr(EnvLogJsonOutput, "true")
-	port := env.EnvOr(EnvPort, "8085")
-	databaseHost := env.EnvOr(EnvDatabaseHost, "localhost")
-	database := env.EnvOr(EnvDatabase, "curtzdb")
-	databaseUser := env.EnvOr(EnvDatabaseUsername, "curtzUser")
-	databasePass := env.EnvOr(EnvDatabasePassword, "curtzPassword")
-	databasePort := env.EnvOr(EnvDatabasePort, "27017")
-	databaseUsesSRV := env.EnvOr(EnvDatabaseUsesSRV, "true")
-	authSecret := env.EnvOr(EnvAuthSecret, "curtz-secret")
-	authExpireDelta := env.EnvOr(EnvAuthExpireDelta, "15")
-	authRefreshExpireDelta := env.EnvOr(EnvAuthRefreshExpireDelta, "1")
-	authIssuer := env.EnvOr(EnvAuthIssuer, "curtz")
-	cacheHost := env.EnvOr(EnvCacheHost, "localhost")
-	cachePort := env.EnvOr(EnvCachePort, "6379")
-	cacheUsername := env.EnvOr(EnvCacheUsername, "curtzUser")
-	cachePassword := env.EnvOr(EnvCachePassword, "curtzPassword")
-	cacheRequireAuth := env.EnvOr(EnvCacheRequireAuth, "false")
-	sentryEnabled := env.EnvOr(EnvSentryEnabled, "false")
-	sentryDsn := env.EnvOr(EnvSentryDsn, "")
-	sentryEnvironment := env.EnvOr(EnvSentryEnvironment, "development")
-	sentrySampleRate := env.EnvOr(EnvSentrySampleRate, "0.5")
+	envConfig := env.NewEnvConfig()
 
-	enableApiDocs, err := strconv.ParseBool(docsEnabled)
-	if err != nil {
-		enableApiDocs = true
+	dbClient, dbErr := postgres.NewPostgresClient(postgres.PostgresDatabaseConfig{
+		Host:            envConfig.EnvOr("DATABASE_HOST", "localhost"),
+		Username:        envConfig.EnvOr("DATABASE_USERNAME", "curtz-user"),
+		Password:        envConfig.EnvOr("DATABASE_PASSWORD", "curtz-pass"),
+		Name:            envConfig.EnvOr("DATABASE_NAME", "curtzdb"),
+		Port:            envConfig.EnvOr("DATABASE_PORT", "5433"),
+		Url:             envConfig.EnvOr("DATABASE_URL", ""),
+		SslMode:         envConfig.EnvOr("DATABASE_SSL_MODE", "disable"),
+		MaxConns:        envConfig.EnvInt32Or("DATABASE_MAX_CONNS", 30),
+		MinConns:        envConfig.EnvInt32Or("DATABASE_MIN_CONNS", 5),
+		MaxConnLifetime: envConfig.EnvDurationOr("DATABASE_MAX_CONN_LIFETIME", 1, time.Hour),
+		MaxConnIdleTime: envConfig.EnvDurationOr("DATABASE_MAX_CONN_IDLE_TIME", 30, time.Minute),
+		ConnTimeout:     envConfig.EnvDurationOr("DATABASE_CONN_TIMEOUT", 30, time.Second),
+		QueryTimeout:    envConfig.EnvDurationOr("DATABASE_QUERY_TIMEOUT", 10, time.Second),
+	})
+	if dbErr != nil {
+		slog.Error("failed to connect to the database", "error", dbErr)
+		os.Exit(1)
+	}
+	defer dbClient.Close()
+
+	dbConfig := database.Config{
+		OperationTimeout: envConfig.EnvDurationOr("DATABASE_OPERATION_TIMEOUT", 30, time.Second),
+		RetryConfig:      recoveryutils.DefaultRetryConfig,
 	}
 
-	expireDelta, err := strconv.Atoi(authExpireDelta)
-	if err != nil {
-		expireDelta = 15
-	}
-
-	refreshExpireDelta, err := strconv.Atoi(authRefreshExpireDelta)
-	if err != nil {
-		refreshExpireDelta = 1
-	}
-
-	cacheNeedsAuth, err := strconv.ParseBool(cacheRequireAuth)
-	if err != nil {
-		cacheNeedsAuth = false
-	}
-
-	databaseUsesSrv, err := strconv.ParseBool(databaseUsesSRV)
-	if err != nil {
-		databaseUsesSrv = true
-	}
-
-	enableJsonOutput, err := strconv.ParseBool(logJsonOutput)
-	if err != nil {
-		enableJsonOutput = true
-	}
-
-	enableSentry, err := strconv.ParseBool(sentryEnabled)
-	if err != nil {
-		enableSentry = false
-	}
-
-	sentryRate, err := strconv.ParseFloat(sentrySampleRate, 64)
-	if err != nil {
-		sentryRate = 0.5
-	}
-
-	configuration := config.Config{
-		Env:         environment,
-		DocsEnabled: enableApiDocs,
-		Port:        port,
-		Logging: config.LoggingConfig{
-			Level:            logLevel,
-			EnableJSONOutput: enableJsonOutput,
-		},
-		Auth: config.AuthConfig{
-			Jwt: config.Jwt{
-				Secret:             authSecret,
-				ExpireDelta:        expireDelta,
-				RefreshExpireDelta: refreshExpireDelta,
-				Issuer:             authIssuer,
-			},
-		},
-		Database: config.DatabaseConfig{
-			Host:     databaseHost,
-			Database: database,
-			User:     databaseUser,
-			Password: databasePass,
-			Port:     databasePort,
-			IsSRV:    databaseUsesSrv,
-		},
-		Cache: config.CacheConfig{
-			Host:        cacheHost,
-			Port:        cachePort,
-			Username:    cacheUsername,
-			Password:    cachePassword,
-			RequireAuth: cacheNeedsAuth,
-		},
-		Monitoring: config.MonitoringConfig{
-			Sentry: config.Sentry{
-				DSN:              sentryDsn,
-				Environment:      sentryEnvironment,
-				Enabled:          enableSentry,
-				TracesSampleRate: sentryRate,
-			},
+	authConfig := config.AuthConfig{
+		Jwt: config.Jwt{
+			Secret:             envConfig.EnvOr("AUTH_SECRET", "curtz-secret"),
+			Issuer:             envConfig.EnvOr("AUTH_ISSUER", "curtz"),
+			ExpireDelta:        envConfig.EnvIntOr("AUTH_EXPIRE_DELTA", 15),
+			RefreshExpireDelta: envConfig.EnvIntOr("AUTH_REFRESH_EXPIRE_DELTA", 24),
 		},
 	}
 
-	srv := server.NewServer(&configuration)
+	tokenService := jwtauth.NewTokenService(authConfig, jwt.New())
 
-	if _, err := monitoring.New(configuration.Monitoring); err != nil {
-		log.Fatalf("Failed to configure Monitoring: %s", err)
-	}
+	// No email transport is configured yet, so verification links are logged rather than sent.
+	notifier := notifications.NewEmailNotifier(
+		envConfig.EnvOr("APP_BASE_URL", "http://localhost:8085"),
+		notifications.NewLoggingEmailSender(),
+	)
 
-	authService := auth.NewService(configuration.Auth, jwt.New())
-	corsMiddleware := middleware.NewCORSMiddleware(configuration.CorsHeaders)
-	loggingMiddleware := middleware.NewLoggingMiddleware(configuration.Logging)
-	recoveryMiddleware := middleware.NewRecoveryMiddleware()
-	authMiddleware := middleware.NewAuthMiddleware(configuration.Auth, authService)
-	monitoringMiddleware := middleware.NewMonitoringMiddleware(configuration.Monitoring)
+	identityService := identityapp.NewService(
+		identitydatastore.NewUserDatastoreAdapter(dbClient, dbConfig),
+		tokenService,
+		notifier,
+	)
 
-	repository := repositories.NewRepository(configuration.Database)
-	emailSvc := email.NewEmailSvc()
-	notificationSvc := notifications.NewNotificationSvc(configuration.Host, emailSvc)
-	cache := cache.New(configuration.Cache)
+	srv := server.NewServer(server.ServerConfig{
+		Header:      envConfig.EnvOr("SERVER_HEADER", "Curtz"),
+		Host:        envConfig.EnvOr("SERVER_HOST", "0.0.0.0"),
+		Port:        envConfig.EnvIntOr("HTTP_PORT", 8085),
+		AppName:     envConfig.EnvOr("SERVER_NAME", "Curtz"),
+		Version:     envConfig.EnvOr("SERVER_VERSION", "1.0.0"),
+		Environment: envConfig.EnvOr("ENVIRONMENT", "development"),
+	})
 
-	userService := usersvc.NewUserSvc(repository.GetUserRepo(), notificationSvc)
-	urlService := urlsvc.NewUrlSvc(repository.GetUrlReadRepo(), repository.GetUrlWriteRepo(), userService, cache)
-	urlReadService := urlReadSvc.NewUrlReadSvc(repository.GetUrlReadRepo(), userService, cache)
-	urlWriteService := urlWriteSvc.NewUrlWriteSvc(repository.GetUrlWriteRepo(), userService)
+	// Everything is authenticated unless it is listed here. Registration, login, token refresh
+	// and email verification must be reachable without a token, by definition.
+	srv.Use(apimiddleware.AuthMiddleware(apimiddleware.AuthConfig{
+		TokenService: tokenService,
+		PublicPaths: []string{
+			baseURI + "/auth/register",
+			baseURI + "/auth/login",
+			baseURI + "/auth/oauth/token",
+			baseURI + "/auth/verify",
+			"/health",
+			"/metrics",
+		},
+		PublicPrefixes: []string{"/docs/"},
+	}))
 
-	baseUri := "/api/v1/curtz"
+	srv.RegisterHandlers([]router.Router{
+		identityapi.NewRouter(baseURI, identityService),
+	})
 
-	routers := []router.Router{
-		url.NewUrlRouter(baseUri, urlService, urlReadService, urlWriteService),
-		authApi.NewRouter(baseUri, userService, authService),
-		health.NewHealthRouter(),
-		client.NewClientRouter(urlService, userService),
-	}
-
-	srv.InitRouter(routers...)
-
-	srv.UseMiddleware(monitoringMiddleware)
-	srv.UseMiddleware(loggingMiddleware)
-	srv.UseMiddleware(corsMiddleware)
-	srv.UseMiddleware(recoveryMiddleware)
-	srv.UseMiddleware(authMiddleware)
-
-	appServer := srv.CreateServer()
-
-	err = appServer.Run(fmt.Sprintf(":%s", port))
-	if err != nil {
-		_, msg := fmt.Printf("Failed to start Server %s", err)
-		log.Error(msg)
-		panic(msg)
+	if err := srv.Listen(); err != nil {
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }

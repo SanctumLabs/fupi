@@ -14,6 +14,10 @@ func NewOriginalURL(url string) (OriginalURL, error) {
 		return OriginalURL{}, errdefs.ErrInvalidURLLen
 	}
 
+	if filterRe.MatchString(url) {
+		return OriginalURL{}, errdefs.ErrFilteredURL
+	}
+
 	if !urlRe.MatchString(url) {
 		return OriginalURL{}, errdefs.ErrInvalidURL
 	}

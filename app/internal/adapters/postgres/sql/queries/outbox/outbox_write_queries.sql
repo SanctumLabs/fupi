@@ -1,15 +1,17 @@
 -- name: QueryCreateOutboxEvent :one
 INSERT INTO 
   outbox_events (
+    id,
     group_id,
     correlation_id,
+    partition_key,
     destination,
     event_type,
     headers,
     payload,
     error_message,
     metadata
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;
 
 -- name: QueryUpdateOutboxEvent :one
 UPDATE outbox_events AS oe

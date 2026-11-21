@@ -16,7 +16,7 @@ type Email struct {
 // NewEmail is a factory method that creates an email number
 func NewEmail(value string) (Email, error) {
 	if err := validators.ValidateEmail(value); err != nil {
-		return Email{}, fmt.Errorf("phone number %s is invalid", value)
+		return Email{}, fmt.Errorf("email %s is invalid", value)
 	}
 
 	return Email{
@@ -29,12 +29,12 @@ func (e *Email) Value() string {
 	return e.value
 }
 
-// SetPhone sets the phone number
-func (e *Email) SetPhone(phoneNumber string) error {
-	if err := validators.ValidateEmail(phoneNumber); err != nil {
-		return fmt.Errorf("phone number %s is invalid", phoneNumber)
+// SetEmail sets the email address
+func (e *Email) SetEmail(email string) error {
+	if err := validators.ValidateEmail(email); err != nil {
+		return fmt.Errorf("email %s is invalid", email)
 	}
-	e.value = phoneNumber
+	e.value = email
 	return nil
 }
 

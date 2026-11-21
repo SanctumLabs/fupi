@@ -7,30 +7,55 @@ on:
     types:
       - completed
 
+permissions:
+  contents: read
+
 jobs:
-  unittests:
-    name: Unit Tests
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  unit_tests:
+     strategy:
+       matrix:
+         go-version: [ '1.25' ]
+     name: Unit Tests (Go ${{ matrix.go-version }})
+     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+     uses: SanctumLabs/ci-workflows/.github/workflows/go-test.yml@main
+     with:
+       go-version: ${{ matrix.go-version }}
+       command: make test.coverage
+     secrets:
+       codacy_token: ${{ secrets.CODACY_PROJECT_TOKEN }}
 
-    runs-on: ubuntu-latest
+  integration_tests:
+     strategy:
+       matrix:
+         go-version: [ '1.25' ]
+     name: Integration Tests (Go ${{ matrix.go-version }})
+     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+     uses: SanctumLabs/ci-workflows/.github/workflows/go-test.yml@main
+     with:
+       go-version: ${{ matrix.go-version }}
+       command: make test.integration
+       database-image-name: dhi.io/postgres
+       database-image-version: 18-alpine3.23-dev
+       database-name: curtz_database_test
+       database-username: curtz_user
+       database-password: curtz_password
+       database-port: 5432
+       database-port-internal: 5432
 
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Install Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.18
-
-      - name: Run tests
-        run: make test-coverage
-
-      - name: Upload Test Coverage
-        uses: codecov/codecov-action@v2
-
-      # Ref: https://docs.codacy.com/coverage-reporter/#submitting-coverage-for-golang
-      - name: Run codacy-coverage-reporter
-        env:
-          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
-        run: |
-          bash <(curl -Ls https://coverage.codacy.com/get.sh) report --force-coverage-parser go -r coverage.out
+  e2e_tests:
+     strategy:
+       matrix:
+         go-version: [ '1.25' ]
+     name: E2E Tests (Go ${{ matrix.go-version }})
+     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+     uses: SanctumLabs/ci-workflows/.github/workflows/go-test.yml@main
+     with:
+       go-version: ${{ matrix.go-version }}
+       command: make test.e2e
+       database-image-name: dhi.io/postgres
+       database-image-version: 18-alpine3.23-dev
+       database-name: curtz_database_test
+       database-username: curtz_user
+       database-password: curtz_password
+       database-port: 5432
+       database-port-internal: 5432

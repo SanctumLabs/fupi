@@ -1,2 +1,2 @@
-// Package urlrepo provides the implementation of the URL repository for PostgreSQL database.
-package urlrepo
+// Package urldatastore contains the PostgreSQL implementation of the URL datastore ports.
+package urldatastore

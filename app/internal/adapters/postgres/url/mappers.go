@@ -1,4 +1,4 @@
-package urlrepo
+package urldatastore
 
 import (
 	"fmt"
@@ -11,13 +11,7 @@ import (
 	"github.com/sanctumlabs/curtz/app/pkg/infra/database/postgres"
 )
 
-type UrlMapperParams struct {
-	UrlModel postgresql.Url
-	Status   string
-}
-
-func MapUrlModelToEntity(params UrlMapperParams) (url.URL, error) {
-	urlModel := params.UrlModel
+func MapUrlModelToEntity(urlModel postgresql.Url) (url.URL, error) {
 	urlId, urlIdErr := postgres.UUIDToString(urlModel.ID)
 	if urlIdErr != nil {
 		return url.URL{}, fmt.Errorf("failed to parse id when mapping url %v with error %w", urlModel.ID, urlIdErr)
@@ -64,14 +58,14 @@ func MapUrlModelToEntity(params UrlMapperParams) (url.URL, error) {
 			},
 		},
 		UserId:        userId,
-		ShortCode:     params.UrlModel.ShortCode,
-		CustomAlias:   params.UrlModel.CustomAlias.String,
-		OriginalUrl:   params.UrlModel.OriginalUrl,
-		Status:        url.URLStatus(params.Status),
-		ExpiresOn:     params.UrlModel.ExpiresOn.Time,
-		OgTitle:       params.UrlModel.OgTitle.String,
-		OgDescription: params.UrlModel.OgDescription.String,
-		OgImageUrl:    params.UrlModel.OgImageUrl.String,
+		ShortCode:     urlModel.ShortCode,
+		CustomAlias:   urlModel.CustomAlias.String,
+		OriginalUrl:   urlModel.OriginalUrl,
+		Status:        url.URLStatus(urlModel.Status),
+		ExpiresOn:     urlModel.ExpiresOn.Time,
+		OgTitle:       urlModel.OgTitle.String,
+		OgDescription: urlModel.OgDescription.String,
+		OgImageUrl:    urlModel.OgImageUrl.String,
 	}
 
 	urlEntity, urlEntityErr := url.NewUrl(urlParams)

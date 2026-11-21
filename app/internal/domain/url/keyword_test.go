@@ -2,6 +2,7 @@ package url
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
@@ -23,6 +24,16 @@ var keywordTestCases = []keywordTestCase{
 		name:  "invalid keyword should return nil and error",
 		input: "`'/?.;,<]{}",
 		err:   errdefs.ErrInvalidKeyword,
+	},
+	{
+		name:  "keyword longer than 100 characters should return error",
+		input: strings.Repeat("a", 101),
+		err:   errdefs.ErrKeywordLength,
+	},
+	{
+		name:  "keyword of 100 characters should return keyword and nil error",
+		input: strings.Repeat("a", 100),
+		err:   nil,
 	},
 	{
 		name:  "valid keyword should return keyword and nil error",
@@ -47,7 +58,7 @@ func BenchmarkNewKeyword(b *testing.B) {
 		b.Skip("skipping benchmark in short mode")
 	}
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, tc := range keywordTestCases {
 			_, _ = NewKeyword(tc.input)
 		}
@@ -76,6 +87,11 @@ var createKeywordsTestCases = []createKeywordsTestCase{
 		input: []string{"Social", "Media", "Entertainment", "Sports", "Technology", "Politics", "Business", "Science", "Health", "Travel"},
 		err:   nil,
 	},
+	{
+		name:  "an invalid keyword in the list should return error",
+		input: []string{"Social", "bad keyword"},
+		err:   errdefs.ErrInvalidKeyword,
+	},
 }
 
 func TestCreateKeywords(t *testing.T) {
@@ -84,6 +100,9 @@ func TestCreateKeywords(t *testing.T) {
 			keywords, err := createKeywords(tc.input)
 			if !errors.Is(err, tc.err) {
 				t.Errorf("createKeywords(%s) = (%v, %v), expected error %v, got %v", tc.input, keywords, err, tc.err, err)
+			}
+			if err == nil && len(keywords) != len(tc.input) {
+				t.Errorf("createKeywords(%s) returned %d keywords, expected %d", tc.input, len(keywords), len(tc.input))
 			}
 		})
 	}

@@ -71,6 +71,18 @@ func (et EntityTimestamp) WithDeletedAt(dat time.Time) EntityTimestamp {
 	return et
 }
 
+func (et *EntityTimestamp) String() string {
+	if et.deletedAt != nil {
+		return fmt.Sprintf("EntityTimestamp(createdAt=%s, updatedAt=%s, deletedAt=%s)", et.createdAt, et.updatedAt, *et.deletedAt)
+	}
+	return fmt.Sprintf("EntityTimestamp(createdAt=%s, updatedAt=%s)", et.createdAt, et.updatedAt)
+}
+
+// IsDeleted returns true if the entity has been deleted
+func (et *EntityTimestamp) IsDeleted() bool {
+	return et.deletedAt != nil
+}
+
 // parseEntityTimestamps creates an EntityTimestamp with validation handled, if validation fails, an error is returned
 func parseEntityTimestamps(createdAt, updatedAt time.Time, deletedAt *time.Time) (EntityTimestamp, error) {
 	// validate timestamps

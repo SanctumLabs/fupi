@@ -14,9 +14,10 @@ WHERE kw.value = $1 AND kw.url_id = $2;
 SELECT 
   sqlc.embed(kw),
   COUNT(*) OVER() AS total_records
-FROM keywords kw 
-WHERE sqlc.arg(include_deleted)::bool OR kw.deleted_at IS NULL
-  AND (COALESCE(sqlc.narg(url_status), '') = '' OR us.name = sqlc.narg(url_status))
+FROM keywords kw
+JOIN urls u ON kw.url_id = u.id
+WHERE (sqlc.arg(include_deleted)::bool OR kw.deleted_at IS NULL)
+  AND (sqlc.narg(url_status)::url_status IS NULL OR u.status = sqlc.narg(url_status)::url_status)
 -- Date range filtering
 AND (
   sqlc.narg(date_field)::text IS NULL

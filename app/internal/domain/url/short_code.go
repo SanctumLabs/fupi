@@ -31,7 +31,7 @@ func NewShortCode(value string) (ShortCode, error) {
 		return ShortCode{}, err
 	}
 	if !matched {
-		return ShortCode{}, errdefs.ErrShortCodeInvalidCharacters
+		return ShortCode{}, fmt.Errorf("%w: '%s'", errdefs.ErrShortCodeInvalidCharacters, value)
 	}
 
 	return ShortCode{value: value}, nil

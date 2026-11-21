@@ -2,6 +2,7 @@ package entity
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 type (
@@ -77,4 +78,8 @@ func BytesToMetadata(data []byte) (map[string]any, error) {
 	}
 
 	return metadata, nil
+}
+
+func (e Entity) String() string {
+	return fmt.Sprintf("Entity(id=%s, timestamp=%s)", e.ID().String(), e.EntityTimestamp.String())
 }

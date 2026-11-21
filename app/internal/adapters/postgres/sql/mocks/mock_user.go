@@ -22,7 +22,6 @@ func MockUser(options ...MockUserOption) postgresql.User {
 	passwordHash := faker.Password()
 	verificationToken := faker.UUIDHyphenated()
 	verificaitonExpires := time.Now().Add(24 * time.Hour)
-	statusId := entity.NewID()
 	metadata := []byte{}
 	createdAt := time.Now()
 	updatedAt := time.Now()
@@ -38,7 +37,7 @@ func MockUser(options ...MockUserOption) postgresql.User {
 		Verified:            true,
 		VerificationToken:   pgtype.Text{String: verificationToken, Valid: true},
 		VerificationExpires: pgtype.Timestamptz{Time: verificaitonExpires, Valid: true},
-		StatusID:            pgtype.UUID{Bytes: statusId, Valid: true},
+		Status:              postgresql.UserStatusACTIVE,
 		Metadata:            metadata,
 		CreatedAt:           pgtype.Timestamptz{Time: createdAt, Valid: true},
 		UpdatedAt:           pgtype.Timestamptz{Time: updatedAt, Valid: true},
@@ -83,9 +82,9 @@ func UserWithPasswordHash(passwordHash string) MockUserOption {
 	}
 }
 
-func UserWithStatusId(statusId entity.ID) MockUserOption {
+func UserWithStatus(status postgresql.UserStatus) MockUserOption {
 	return func(u *postgresql.User) {
-		u.StatusID = pgtype.UUID{Bytes: statusId, Valid: true}
+		u.Status = status
 	}
 }
 
@@ -145,6 +144,7 @@ func WithUser(mockUser identity.User) MockUserOption {
 		u.LastName = pgtype.Text{String: mockUser.LastName(), Valid: true}
 		u.Email = email.Value()
 		u.PasswordHash = mockUser.PasswordHash()
+		u.Status = postgresql.UserStatus(mockUser.Status())
 		u.Verified = verification.Verified()
 		u.VerificationToken = pgtype.Text{String: verification.Token(), Valid: true}
 		u.VerificationExpires = pgtype.Timestamptz{Time: verification.Expires(), Valid: true}

@@ -1,5 +1,7 @@
 package entity
 
+import "fmt"
+
 type (
 	// AggregateRoot represents an Aggregate Entity in the system
 	AggregateRoot struct {
@@ -35,4 +37,8 @@ func (ar *AggregateRoot) ApplyDomain(e DomainEvent) {
 // DomainEvents retrieves the domain events
 func (ar *AggregateRoot) DomainEvents() []DomainEvent {
 	return ar.domainEvents
+}
+
+func (ar *AggregateRoot) String() string {
+	return fmt.Sprintf("AggregateRoot(id=%s)", ar.ID())
 }

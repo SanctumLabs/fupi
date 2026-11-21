@@ -8,9 +8,10 @@ import (
 
 type ID = uuid.UUID
 
-// NewID generates a new ID
+// NewID generates a new time-ordered (UUIDv7) ID. IDs are generated in-process so an aggregate
+// has its identity before it is persisted.
 func NewID() ID {
-	return ID(uuid.New())
+	return ID(uuid.Must(uuid.NewV7()))
 }
 
 // IDToString returns the string representation of the ID

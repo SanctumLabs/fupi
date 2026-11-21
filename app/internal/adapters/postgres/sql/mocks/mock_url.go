@@ -21,7 +21,6 @@ func MockUrl(options ...MockUrlOption) postgresql.Url {
 	ogDescription := faker.Word()
 	ogImageUrl := faker.URL()
 	originalUrl := faker.URL()
-	statusId := entity.NewID()
 	metadata := []byte{}
 	expiresOn := time.Now()
 	createdAt := time.Now()
@@ -34,7 +33,7 @@ func MockUrl(options ...MockUrlOption) postgresql.Url {
 		ShortCode:     shortCode,
 		CustomAlias:   pgtype.Text{String: customAlias, Valid: true},
 		OriginalUrl:   originalUrl,
-		StatusID:      pgtype.UUID{Bytes: statusId, Valid: true},
+		Status:        postgresql.UrlStatusACTIVE,
 		OgTitle:       pgtype.Text{String: ogTitle, Valid: true},
 		OgDescription: pgtype.Text{String: ogDescription, Valid: true},
 		OgImageUrl:    pgtype.Text{String: ogImageUrl, Valid: true},
@@ -70,9 +69,9 @@ func WithCustomAlias(customAlias string) MockUrlOption {
 	}
 }
 
-func WithStatusId(statusId entity.ID) MockUrlOption {
+func WithStatus(status postgresql.UrlStatus) MockUrlOption {
 	return func(u *postgresql.Url) {
-		u.StatusID = pgtype.UUID{Bytes: statusId, Valid: true}
+		u.Status = status
 	}
 }
 
@@ -137,6 +136,7 @@ func WithUrl(mockUrl url.URL) MockUrlOption {
 		u.ShortCode = mockUrl.ShortCode().Value()
 		u.CustomAlias = pgtype.Text{String: mockUrl.CustomAlias().Value(), Valid: true}
 		u.OriginalUrl = mockUrl.OriginalURL().Value()
+		u.Status = postgresql.UrlStatus(mockUrl.Status())
 		u.ExpiresOn = pgtype.Timestamptz{Time: mockUrl.ExpiresOn(), Valid: true}
 		u.OgImageUrl = pgtype.Text{String: mockUrl.OgImageUrl(), Valid: true}
 		u.OgTitle = pgtype.Text{String: mockUrl.OgTitle(), Valid: true}
