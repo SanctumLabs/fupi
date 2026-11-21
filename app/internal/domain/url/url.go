@@ -75,9 +75,8 @@ func NewUrl(params URLParams) (*URL, error) {
 		return nil, err
 	}
 
-	// if params.ExpiresOn.In(time.UTC).Before(time.Now().In(time.UTC)) {
-	// 	return nil, fmt.Errorf(errdefs.ErrPastExpiration.Error(), params.ExpiresOn)
-	// }
+	// NOTE: no past-expiry check here. NewUrl also hydrates persisted URLs (see adapters/postgres/url mappers),
+	// and an expired URL must still be readable.
 
 	kws, err := createKeywords(params.Keywords)
 	if err != nil {

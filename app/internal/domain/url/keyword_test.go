@@ -1,6 +1,7 @@
 package url
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
@@ -34,7 +35,7 @@ func TestNewKeyword(t *testing.T) {
 	for _, tc := range keywordTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			keyword, err := NewKeyword(tc.input)
-			if err != tc.err {
+			if !errors.Is(err, tc.err) {
 				t.Errorf("NewKeyword(%s) = (%v, %v), expected error %v, got %v", tc.input, keyword, err, tc.err, err)
 			}
 		})
@@ -81,7 +82,7 @@ func TestCreateKeywords(t *testing.T) {
 	for _, tc := range createKeywordsTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			keywords, err := createKeywords(tc.input)
-			if err != tc.err {
+			if !errors.Is(err, tc.err) {
 				t.Errorf("createKeywords(%s) = (%v, %v), expected error %v, got %v", tc.input, keywords, err, tc.err, err)
 			}
 		})

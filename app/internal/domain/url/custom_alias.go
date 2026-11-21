@@ -17,7 +17,7 @@ type CustomAlias struct {
 func NewCustomAlias(value string) (CustomAlias, error) {
 	// Validate length
 	if len(value) < 3 || len(value) > 100 {
-		return CustomAlias{}, fmt.Errorf(errdefs.ErrCustomAliasInvalidLength.Error(), value)
+		return CustomAlias{}, fmt.Errorf("%w: '%s'", errdefs.ErrCustomAliasInvalidLength, value)
 	}
 
 	// Validate characters (alphanumeric and dashes only)

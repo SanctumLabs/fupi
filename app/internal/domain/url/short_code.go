@@ -22,7 +22,7 @@ func (sc ShortCode) Value() string {
 func NewShortCode(value string) (ShortCode, error) {
 	// Validate length
 	if len(value) < 6 || len(value) > 10 {
-		return ShortCode{}, fmt.Errorf(errdefs.ErrShortCodeInvalidLength.Error(), value)
+		return ShortCode{}, fmt.Errorf("%w: '%s'", errdefs.ErrShortCodeInvalidLength, value)
 	}
 
 	// Validate characters (base62 only)

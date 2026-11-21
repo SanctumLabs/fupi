@@ -23,11 +23,11 @@ type Keyword struct {
 func NewKeyword(keyword string) (Keyword, error) {
 
 	if l := len(keyword); l < 2 || l > 25 {
-		return Keyword{}, fmt.Errorf(errdefs.ErrKeywordLength.Error(), keyword)
+		return Keyword{}, fmt.Errorf("%w: '%s'", errdefs.ErrKeywordLength, keyword)
 	}
 
 	if !kwRe.MatchString(keyword) {
-		return Keyword{}, fmt.Errorf(errdefs.ErrInvalidKeyword.Error(), keyword)
+		return Keyword{}, fmt.Errorf("%w: '%s'", errdefs.ErrInvalidKeyword, keyword)
 	}
 
 	id := identifier.New()

@@ -1,6 +1,7 @@
 package url
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
@@ -74,7 +75,7 @@ func TestNewShortCode(t *testing.T) {
 	for _, tc := range shortCodeTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			shortCode, err := NewShortCode(tc.input)
-			if err != tc.err {
+			if !errors.Is(err, tc.err) {
 				t.Errorf("NewShortCode(%s) = (%v, %v), expected error %v, got %v", tc.input, shortCode, err, tc.err, err)
 			}
 			if err == nil && shortCode.Value() != tc.input {

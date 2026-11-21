@@ -1,6 +1,7 @@
 package url
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/sanctumlabs/curtz/app/pkg/errdefs"
@@ -59,7 +60,7 @@ func TestNewCustomAlias(t *testing.T) {
 	for _, tc := range customAliasTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			customAlias, err := NewCustomAlias(tc.input)
-			if err != tc.err {
+			if !errors.Is(err, tc.err) {
 				t.Errorf("NewCustomAlias(%s) = (%v, %v), expected error %v, got %v", tc.input, customAlias, err, tc.err, err)
 			}
 			if err == nil && customAlias.Value() != tc.input {
