@@ -200,3 +200,17 @@ func BenchmarkNewUrl(b *testing.B) {
 		_, _ = NewUrl(params)
 	}
 }
+
+// NewUrl hydrates persisted state, so a past expiry must be accepted: expired URLs still have to be readable.
+func TestNewUrl_AllowsPastExpirationWhenHydrating(t *testing.T) {
+	params := createValidURLParams()
+	params.ExpiresOn = time.Now().Add(-24 * time.Hour)
+
+	u, err := NewUrl(params)
+	if err != nil {
+		t.Fatalf("NewUrl() with past expiry returned error %v, expected none", err)
+	}
+	if u.IsActive() {
+		t.Errorf("URL with past expiry should not be active")
+	}
+}
