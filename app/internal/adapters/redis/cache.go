@@ -42,7 +42,7 @@ func New(config config.CacheConfig) *Cache {
 
 	cmd := redisClient.Ping(ctx)
 	if cmd.Err() != nil {
-		log.Errorf("Failed to connect to cache", cmd.Err())
+		log.Errorf("Failed to connect to cache: %v", cmd.Err())
 	}
 
 	log.Infof("Connected to cache at host %s", config.Host)
