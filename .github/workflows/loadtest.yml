@@ -81,7 +81,7 @@ jobs:
         run: make infra.pgstat MODE=single
       - name: Upload the summary
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: loadtest-summary
           path: loadtest/results/
