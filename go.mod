@@ -18,7 +18,7 @@ require (
 	github.com/matoous/go-nanoid v1.5.1
 	github.com/moby/moby/api v1.56.1
 	github.com/onsi/ginkgo/v2 v2.33.0
-	github.com/onsi/gomega v1.43.1
+	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/extra/redisotel/v9 v9.19.0
 	github.com/rs/xid v1.6.0
