@@ -1,6 +1,6 @@
 # Builder: the pinned Go toolchain. GOTOOLCHAIN=local makes a toolchain older than go.mod fail loudly instead of
 # silently downloading another one.
-FROM golang:1.26-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS build
+FROM golang:1.27-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 
 ARG VERSION=unknown
 ARG GIT_COMMIT=unknown
