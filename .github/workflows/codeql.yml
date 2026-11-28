@@ -34,7 +34,7 @@ jobs:
 
       # go.mod needs Go 1.26, and Autobuild uses the Go on the runner.
       - name: Install Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.1.0
         with:
           go-version-file: go.mod
 
