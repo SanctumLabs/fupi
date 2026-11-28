@@ -40,13 +40,13 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.39.3
+        uses: github/codeql-action/init@v4.39.5
         with:
           languages: go
 
       # Autobuild attempts to build any compiled languages. If it fails, replace it with an explicit build step.
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v4.39.3
+        uses: github/codeql-action/autobuild@v4.39.5
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.39.3
+        uses: github/codeql-action/analyze@v4.39.5
