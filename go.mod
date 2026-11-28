@@ -27,7 +27,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
 	github.com/twmb/franz-go v1.22.1
-	github.com/twmb/franz-go/pkg/kmsg v1.14.0
+	github.com/twmb/franz-go/pkg/kmsg v1.15.2
 	github.com/valyala/fasthttp v1.51.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.44.0
