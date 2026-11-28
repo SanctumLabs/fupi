@@ -50,7 +50,7 @@ jobs:
       run: yarn add danger
 
     - name: Danger CI Check
-      uses: danger/danger-js@14.0.6
+      uses: danger/danger-js@14.1.0
       env:
         CI: true
         GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
